@@ -10,6 +10,7 @@ export default async function PlantiosPage() {
     .select(
       `id, ano, data_plantio, data_colheita,
        area_ha, volume_colhido, produtividade_sc_ha, agronomo,
+       latitude, longitude,
        talhoes(nome), culturas(nome), safras(nome), unidades(sigla)`
     )
     .order("ano", { ascending: false })
@@ -26,6 +27,8 @@ export default async function PlantiosPage() {
     produtividade_sc_ha:
       p.produtividade_sc_ha != null ? Number(p.produtividade_sc_ha) : null,
     agronomo: p.agronomo ?? null,
+    latitude: p.latitude != null ? Number(p.latitude) : null,
+    longitude: p.longitude != null ? Number(p.longitude) : null,
     talhao: p.talhoes?.nome ?? "—",
     cultura: p.culturas?.nome ?? "—",
     safra: p.safras?.nome ?? "—",

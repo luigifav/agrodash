@@ -18,13 +18,19 @@ type ColumnMapping = {
     unidade_sigla: string | null;
     produtividade_sc_ha: string | null;
     agronomo_nome: string | null;
+    latitude: string | null;
+    longitude: string | null;
+    area_unidade: string | null;
   };
   normalizations: {
     safra_nome?: Record<string, string>;
     cultura_nome?: Record<string, string>;
     unidade_sigla?: Record<string, string>;
+    area_unidade?: Record<string, string>;
   };
   ano_from_plantio?: boolean;
+  talhao_from_concat?: boolean;
+  talhao_concat_columns?: string[];
 };
 
 // ── System prompts ─────────────────────────────────────────────────────────────
@@ -42,27 +48,65 @@ Formato exato:
     "data_plantio": "nome exato da coluna ou null",
     "data_colheita": "nome exato da coluna ou null",
     "area_ha": "nome exato da coluna ou null",
+    "area_unidade": "nome exato da coluna ou null",
     "volume_colhido": "nome exato da coluna ou null",
     "unidade_sigla": "nome exato da coluna ou null",
     "produtividade_sc_ha": "nome exato da coluna ou null",
-    "agronomo_nome": "nome exato da coluna ou null"
+    "agronomo_nome": "nome exato da coluna ou null",
+    "latitude": "nome exato da coluna ou null",
+    "longitude": "nome exato da coluna ou null"
   },
   "normalizations": {
     "safra_nome": { "valor_exato_da_planilha": "Verão|Inverno|Safrinha" },
     "cultura_nome": { "valor_exato_da_planilha": "Soja|Milho|Sorgo|Cevada|Batata|Trigo|Feijão" },
-    "unidade_sigla": { "valor_exato_da_planilha": "sc|t" }
+    "unidade_sigla": { "valor_exato_da_planilha": "sc|t" },
+    "area_unidade": { "valor_exato_da_planilha": "alq|ha" }
   },
-  "ano_from_plantio": false
+  "ano_from_plantio": false,
+  "talhao_from_concat": false,
+  "talhao_concat_columns": []
 }
 
 Regras:
-- Se não houver coluna de ano separada, defina ano_from_plantio: true (o código extrai do data_plantio)
-- normalizations deve cobrir TODOS os valores únicos de safra, cultura e unidade encontrados nas amostras
-- Para agronomo_nome, procure por colunas como "Agrônomo", "Agronomo", "Responsável", "Técnico", "Eng. Agrônomo" ou similares
-- Campos não encontrados na planilha: use null`;
+- Se não houver coluna de ano separada, defina ano_from_plantio: true
+- Se o talhão for formado pela junção de múltiplas colunas (ex: Propriedade + nome do pivô), defina talhao_from_concat: true e liste as colunas em talhao_concat_columns (ex: ["Propriedade", "Pivot"])
+- Se a área estiver em alqueires (coluna "Alq", "Alqueire", "Alqueires" ou similar), normalize area_unidade para "alq"
+- Se a área estiver em hectares, normalize area_unidade para "ha"
+- Para colunas de coordenadas em qualquer formato (decimal ou grau-minuto-segundo), mapeie latitude e longitude
+- normalizations deve cobrir TODOS os valores únicos encontrados nas amostras
+- Campos não encontrados: use null`;
 
-const PDF_SYSTEM =
-  "Você é um parser de relatórios agrícolas brasileiros em PDF. O texto abaixo foi extraído de um PDF que pode ser uma tabela, relatório ou planilha exportada. Analise o conteúdo e extraia todos os registros de plantio que encontrar. Retorne APENAS um array JSON válido, sem nenhum texto adicional, sem markdown, sem explicações. Se um campo não existir no documento, use null. Para safra, normalize para: Verão, Inverno ou Safrinha. Para cultura, normalize para: Soja, Milho, Sorgo, Cevada, Batata, Trigo ou Feijão. Para datas, use formato YYYY-MM-DD. O formato de cada objeto deve ser: { talhao_nome, ano, safra_nome, cultura_nome, data_plantio, data_colheita, area_ha, volume_colhido, unidade_sigla, produtividade_sc_ha, agronomo_nome }.";
+const PDF_SYSTEM = `Você é um parser de relatórios agrícolas brasileiros em PDF. O texto abaixo foi extraído de um PDF que pode ser uma tabela, relatório ou planilha exportada. Analise o conteúdo e extraia todos os registros de plantio que encontrar.
+
+Retorne APENAS um array JSON válido, sem nenhum texto adicional, sem markdown, sem explicações.
+
+Regras obrigatórias:
+- Para safra, normalize para: Verão, Inverno ou Safrinha
+- Para cultura, normalize para: Soja, Milho, Sorgo, Cevada, Batata, Trigo ou Feijão
+- Para datas, use formato YYYY-MM-DD. Se o ano tiver apenas 2 dígitos (ex: 03/10/25), interprete como 2025
+- Se a área estiver em alqueires (coluna "Alq" ou similar), defina area_unidade como "alq" e retorne o valor bruto (sem converter). Se já estiver em hectares, defina area_unidade como "ha"
+- Se houver coordenadas em grau-minuto-segundo (ex: 23° 37' 51.65" S), converta para decimal negativo: -(graus + minutos/60 + segundos/3600). O resultado para S e W deve ser negativo
+- O talhao_nome deve ser formado pela concatenação de todos os campos que identificam o talhão (ex: Propriedade + nome do pivô/área separados por espaço, como "TRIUNFO PV 3" ou "N. ESP. PIVO 8")
+- Se não houver coluna de ano mas houver data_plantio, extraia o ano dela
+- Se um campo não existir no documento, use null
+
+O formato de cada objeto deve ser exatamente:
+{
+  talhao_nome,
+  ano,
+  safra_nome,
+  cultura_nome,
+  data_plantio,
+  data_colheita,
+  area_ha,
+  area_unidade,
+  volume_colhido,
+  unidade_sigla,
+  produtividade_sc_ha,
+  agronomo_nome,
+  latitude,
+  longitude
+}`;
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -90,6 +134,20 @@ function parseNumber(value: unknown): number | null {
   return isNaN(n) ? null : n;
 }
 
+function parseCoordenada(value: unknown): number | null {
+  if (value == null || value === "") return null;
+  if (typeof value === "number") return isNaN(value) ? null : value;
+  const str = String(value).trim();
+  // DMS: 23° 37' 51.65" S  ou  48° 47' 15.42" W (suporta variantes Unicode de ' e ")
+  const dms = str.match(/(\d+)[°]\s*(\d+)['\u2019\u2032]\s*([\d.]+)["\u201d\u2033]\s*([NSEWnsew])/);
+  if (dms) {
+    const decimal = parseInt(dms[1]) + parseInt(dms[2]) / 60 + parseFloat(dms[3]) / 3600;
+    return (dms[4].toUpperCase() === "S" || dms[4].toUpperCase() === "W") ? -decimal : decimal;
+  }
+  const n = parseFloat(str.replace(",", "."));
+  return isNaN(n) ? null : n;
+}
+
 function lookupNorm(raw: string, map: Record<string, string> | undefined): string {
   if (!map) return raw;
   const trimmed = raw.trim();
@@ -108,7 +166,7 @@ function applyMapping(
   rows: Record<string, unknown>[],
   mapping: ColumnMapping
 ) {
-  const { columns: c, normalizations: norm = {}, ano_from_plantio } = mapping;
+  const { columns: c, normalizations: norm = {}, ano_from_plantio, talhao_from_concat, talhao_concat_columns } = mapping;
 
   return rows.map((row) => {
     const dataPlantio = parseDate(c.data_plantio ? row[c.data_plantio] : null);
@@ -123,22 +181,37 @@ function applyMapping(
       ano = parseInt(dataPlantio.slice(0, 4));
     }
 
+    let talhao_nome = "";
+    if (talhao_from_concat && talhao_concat_columns?.length) {
+      talhao_nome = talhao_concat_columns
+        .map((col) => String(row[col] ?? "").trim())
+        .filter(Boolean)
+        .join(" ");
+    } else {
+      talhao_nome = c.talhao_nome ? String(row[c.talhao_nome] ?? "") : "";
+    }
+
     const rawSafra = c.safra_nome ? String(row[c.safra_nome] ?? "") : "";
     const rawCultura = c.cultura_nome ? String(row[c.cultura_nome] ?? "") : "";
     const rawUnidade = c.unidade_sigla ? String(row[c.unidade_sigla] ?? "") : "";
+    const rawAreaUnidade = c.area_unidade ? String(row[c.area_unidade] ?? "") : "";
+    const area_unidade = lookupNorm(rawAreaUnidade, norm.area_unidade) || "ha";
 
     return {
-      talhao_nome: c.talhao_nome ? String(row[c.talhao_nome] ?? "") : "",
+      talhao_nome,
       ano,
       safra_nome: lookupNorm(rawSafra, norm.safra_nome) || null,
       cultura_nome: lookupNorm(rawCultura, norm.cultura_nome) || null,
       data_plantio: dataPlantio,
       data_colheita: dataColheita,
       area_ha: parseNumber(c.area_ha ? row[c.area_ha] : null),
+      area_unidade,
       volume_colhido: parseNumber(c.volume_colhido ? row[c.volume_colhido] : null),
       unidade_sigla: lookupNorm(rawUnidade, norm.unidade_sigla) || null,
       produtividade_sc_ha: parseNumber(c.produtividade_sc_ha ? row[c.produtividade_sc_ha] : null),
       agronomo_nome: c.agronomo_nome ? String(row[c.agronomo_nome] ?? "") || null : null,
+      latitude: parseCoordenada(c.latitude ? row[c.latitude] : null),
+      longitude: parseCoordenada(c.longitude ? row[c.longitude] : null),
     };
   });
 }

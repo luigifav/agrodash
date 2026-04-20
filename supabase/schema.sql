@@ -50,6 +50,9 @@ CREATE TABLE IF NOT EXISTS plantios (
   volume_colhido      DECIMAL(12, 4),
   unidade_id          UUID            NOT NULL REFERENCES unidades(id),
   produtividade_sc_ha DECIMAL(10, 4),
+  latitude            DECIMAL(10, 7),
+  longitude           DECIMAL(10, 7),
+  area_unidade        TEXT NOT NULL DEFAULT 'ha',
   criado_em           TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
   criado_por          UUID            REFERENCES auth.users(id),
   agronomo            TEXT

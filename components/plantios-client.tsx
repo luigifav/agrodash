@@ -16,6 +16,8 @@ export type PlantioRow = {
   safra: string
   unidade: string
   agronomo: string | null
+  latitude: number | null
+  longitude: number | null
 }
 
 type Props = {
