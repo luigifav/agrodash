@@ -15,6 +15,7 @@ export type PlantioRow = {
   cultura: string
   safra: string
   unidade: string
+  agronomo: string | null
 }
 
 type Props = {
@@ -71,6 +72,7 @@ export function PlantiosClient({ plantios, anos, safras, culturas, talhoes }: Pr
 
   const columns = [
     { label: 'Talhão', right: false },
+    { label: 'Agrônomo', right: false },
     { label: 'Cultura', right: false },
     { label: 'Safra', right: false },
     { label: 'Ano', right: false },
@@ -174,6 +176,9 @@ export function PlantiosClient({ plantios, anos, safras, culturas, talhoes }: Pr
                     <td className="px-5 py-3 font-medium text-gray-900">
                       {p.talhao}
                     </td>
+                    <td className="px-5 py-3 text-gray-600">
+                      {p.agronomo ?? '—'}
+                    </td>
                     <td className="px-5 py-3 text-gray-600">{p.cultura}</td>
                     <td className="px-5 py-3 text-gray-600">{p.safra}</td>
                     <td className="px-5 py-3 text-gray-600">{p.ano}</td>
@@ -205,7 +210,7 @@ export function PlantiosClient({ plantios, anos, safras, culturas, talhoes }: Pr
               </tbody>
               <tfoot>
                 <tr className="border-t-2 border-gray-200 bg-gray-50 font-semibold text-gray-700">
-                  <td colSpan={6} className="px-5 py-3">
+                  <td colSpan={7} className="px-5 py-3">
                     Total / Média
                   </td>
                   <td className="px-5 py-3 text-right text-gray-900">

@@ -15,6 +15,7 @@ type ParsedRow = {
   volume_colhido: number | null;
   unidade_sigla: string;
   produtividade_sc_ha: number | null;
+  agronomo_nome: string | null;
 };
 
 type UploadRecord = {
@@ -147,6 +148,7 @@ export default function UploadsPage() {
         volume_colhido: r.volume_colhido ?? null,
         unidade_id: unidadeMap.get(r.unidade_sigla) ?? null,
         produtividade_sc_ha: r.produtividade_sc_ha ?? null,
+        agronomo: r.agronomo_nome ?? null,
         criado_por: user?.id ?? null,
       }));
 
@@ -286,6 +288,7 @@ export default function UploadsPage() {
                     "Vol. Colhido",
                     "Unidade",
                     "Prod. (sc/ha)",
+                    "Agrônomo",
                   ].map((h) => (
                     <th
                       key={h}
@@ -407,6 +410,13 @@ export default function UploadsPage() {
                             e.target.value === "" ? null : parseFloat(e.target.value)
                           )
                         }
+                      />
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <input
+                        className="w-28 border border-gray-200 rounded px-1.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-green-400"
+                        value={row.agronomo_nome ?? ""}
+                        onChange={(e) => updateRow(i, "agronomo_nome", e.target.value || null)}
                       />
                     </td>
                   </tr>
