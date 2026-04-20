@@ -12,10 +12,13 @@ type ParsedRow = {
   data_plantio: string;
   data_colheita: string | null;
   area_ha: number;
+  area_unidade: string;
   volume_colhido: number | null;
   unidade_sigla: string;
   produtividade_sc_ha: number | null;
   agronomo_nome: string | null;
+  latitude: number | null;
+  longitude: number | null;
 };
 
 type UploadRecord = {
@@ -28,6 +31,8 @@ type UploadRecord = {
 const SAFRAS = ["Verão", "Inverno", "Safrinha"];
 const CULTURAS = ["Soja", "Milho", "Sorgo", "Cevada", "Batata", "Trigo", "Feijão"];
 const UNIDADES = ["sc", "t"];
+const AREA_UNIDADES = ["ha", "alq"];
+const ALQ_TO_HA = 2.42;
 
 export default function UploadsPage() {
   const supabase = createClient();
@@ -131,6 +136,24 @@ export default function UploadsPage() {
           .select("id, nome");
         if (error) throw new Error(`Erro ao criar talhões: ${error.message}`);
         (inserted ?? []).forEach((t: { id: string; nome: string }) => talhaoMap.set(t.nome, t.id));
+
+        // Upsert Point GeoJSON para talhões recém-criados que têm coordenadas
+        const talhaoCoordMap = new Map<string, { lat: number; lng: number }>();
+        for (const r of rows) {
+          if (r.latitude != null && r.longitude != null && !talhaoCoordMap.has(r.talhao_nome)) {
+            talhaoCoordMap.set(r.talhao_nome, { lat: r.latitude, lng: r.longitude });
+          }
+        }
+        const geojsonUpdates = newTalhaoNames
+          .filter((nome) => talhaoCoordMap.has(nome))
+          .map((nome) => {
+            const coords = talhaoCoordMap.get(nome)!;
+            return supabase
+              .from("talhoes")
+              .update({ geojson: { type: "Point", coordinates: [coords.lng, coords.lat] } })
+              .eq("id", talhaoMap.get(nome)!);
+          });
+        if (geojsonUpdates.length > 0) await Promise.all(geojsonUpdates);
       }
 
       const {
@@ -144,11 +167,14 @@ export default function UploadsPage() {
         ano: r.ano,
         data_plantio: r.data_plantio,
         data_colheita: r.data_colheita ?? null,
-        area_ha: r.area_ha,
+        area_ha: r.area_unidade === "alq" ? r.area_ha * ALQ_TO_HA : r.area_ha,
+        area_unidade: r.area_unidade,
         volume_colhido: r.volume_colhido ?? null,
         unidade_id: unidadeMap.get(r.unidade_sigla) ?? null,
         produtividade_sc_ha: r.produtividade_sc_ha ?? null,
         agronomo: r.agronomo_nome ?? null,
+        latitude: r.latitude ?? null,
+        longitude: r.longitude ?? null,
         criado_por: user?.id ?? null,
       }));
 
@@ -284,11 +310,14 @@ export default function UploadsPage() {
                     "Cultura",
                     "Data Plantio",
                     "Data Colheita",
-                    "Área (ha)",
+                    "Área",
+                    "Unid.",
                     "Vol. Colhido",
                     "Unidade",
                     "Prod. (sc/ha)",
                     "Agrônomo",
+                    "Lat.",
+                    "Long.",
                   ].map((h) => (
                     <th
                       key={h}
@@ -371,6 +400,27 @@ export default function UploadsPage() {
                       />
                     </td>
                     <td className="px-2 py-1.5">
+                      <select
+                        className="border border-gray-200 rounded px-1.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-green-400"
+                        value={row.area_unidade ?? "ha"}
+                        onChange={(e) => {
+                          const newUnit = e.target.value;
+                          const oldUnit = row.area_unidade ?? "ha";
+                          if (newUnit === oldUnit) return;
+                          const converted = newUnit === "ha"
+                            ? row.area_ha * ALQ_TO_HA
+                            : row.area_ha / ALQ_TO_HA;
+                          setRows((prev) => {
+                            const updated = [...prev];
+                            updated[i] = { ...updated[i], area_unidade: newUnit, area_ha: Math.round(converted * 10000) / 10000 };
+                            return updated;
+                          });
+                        }}
+                      >
+                        {AREA_UNIDADES.map((u) => <option key={u}>{u}</option>)}
+                      </select>
+                    </td>
+                    <td className="px-2 py-1.5">
                       <input
                         type="number"
                         step="0.0001"
@@ -417,6 +467,30 @@ export default function UploadsPage() {
                         className="w-28 border border-gray-200 rounded px-1.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-green-400"
                         value={row.agronomo_nome ?? ""}
                         onChange={(e) => updateRow(i, "agronomo_nome", e.target.value || null)}
+                      />
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <input
+                        type="number"
+                        step="0.0000001"
+                        placeholder="—"
+                        className="w-24 border border-gray-200 rounded px-1.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-green-400"
+                        value={row.latitude ?? ""}
+                        onChange={(e) =>
+                          updateRow(i, "latitude", e.target.value === "" ? null : parseFloat(e.target.value))
+                        }
+                      />
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <input
+                        type="number"
+                        step="0.0000001"
+                        placeholder="—"
+                        className="w-24 border border-gray-200 rounded px-1.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-green-400"
+                        value={row.longitude ?? ""}
+                        onChange={(e) =>
+                          updateRow(i, "longitude", e.target.value === "" ? null : parseFloat(e.target.value))
+                        }
                       />
                     </td>
                   </tr>
