@@ -56,9 +56,10 @@ export async function POST(request: NextRequest) {
   if (isPdf) {
     let pdfText: string;
     try {
-      const { PDFParse } = await import("pdf-parse");
-      const parser = new PDFParse({ data: buffer });
-      const result = await parser.getText();
+      // Import from lib directly to avoid pdf-parse loading test files at module init
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const pdfParse = require("pdf-parse/lib/pdf-parse.js") as (buf: Buffer) => Promise<{ text: string }>;
+      const result = await pdfParse(buffer);
       pdfText = result.text;
     } catch {
       return NextResponse.json(
