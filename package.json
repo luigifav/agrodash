@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "migrate": "tsx supabase/migrate.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.10.2",
