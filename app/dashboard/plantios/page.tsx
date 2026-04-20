@@ -9,7 +9,7 @@ export default async function PlantiosPage() {
     .from("plantios")
     .select(
       `id, ano, data_plantio, data_colheita,
-       area_ha, volume_colhido, produtividade_sc_ha,
+       area_ha, volume_colhido, produtividade_sc_ha, agronomo,
        talhoes(nome), culturas(nome), safras(nome), unidades(sigla)`
     )
     .order("ano", { ascending: false })
@@ -25,6 +25,7 @@ export default async function PlantiosPage() {
     volume_colhido: p.volume_colhido != null ? Number(p.volume_colhido) : null,
     produtividade_sc_ha:
       p.produtividade_sc_ha != null ? Number(p.produtividade_sc_ha) : null,
+    agronomo: p.agronomo ?? null,
     talhao: p.talhoes?.nome ?? "—",
     cultura: p.culturas?.nome ?? "—",
     safra: p.safras?.nome ?? "—",

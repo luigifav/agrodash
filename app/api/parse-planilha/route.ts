@@ -17,6 +17,7 @@ type ColumnMapping = {
     volume_colhido: string | null;
     unidade_sigla: string | null;
     produtividade_sc_ha: string | null;
+    agronomo_nome: string | null;
   };
   normalizations: {
     safra_nome?: Record<string, string>;
@@ -43,7 +44,8 @@ Formato exato:
     "area_ha": "nome exato da coluna ou null",
     "volume_colhido": "nome exato da coluna ou null",
     "unidade_sigla": "nome exato da coluna ou null",
-    "produtividade_sc_ha": "nome exato da coluna ou null"
+    "produtividade_sc_ha": "nome exato da coluna ou null",
+    "agronomo_nome": "nome exato da coluna ou null"
   },
   "normalizations": {
     "safra_nome": { "valor_exato_da_planilha": "Verão|Inverno|Safrinha" },
@@ -56,10 +58,11 @@ Formato exato:
 Regras:
 - Se não houver coluna de ano separada, defina ano_from_plantio: true (o código extrai do data_plantio)
 - normalizations deve cobrir TODOS os valores únicos de safra, cultura e unidade encontrados nas amostras
+- Para agronomo_nome, procure por colunas como "Agrônomo", "Agronomo", "Responsável", "Técnico", "Eng. Agrônomo" ou similares
 - Campos não encontrados na planilha: use null`;
 
 const PDF_SYSTEM =
-  "Você é um parser de relatórios agrícolas brasileiros em PDF. O texto abaixo foi extraído de um PDF que pode ser uma tabela, relatório ou planilha exportada. Analise o conteúdo e extraia todos os registros de plantio que encontrar. Retorne APENAS um array JSON válido, sem nenhum texto adicional, sem markdown, sem explicações. Se um campo não existir no documento, use null. Para safra, normalize para: Verão, Inverno ou Safrinha. Para cultura, normalize para: Soja, Milho, Sorgo, Cevada, Batata, Trigo ou Feijão. Para datas, use formato YYYY-MM-DD. O formato de cada objeto deve ser: { talhao_nome, ano, safra_nome, cultura_nome, data_plantio, data_colheita, area_ha, volume_colhido, unidade_sigla, produtividade_sc_ha }.";
+  "Você é um parser de relatórios agrícolas brasileiros em PDF. O texto abaixo foi extraído de um PDF que pode ser uma tabela, relatório ou planilha exportada. Analise o conteúdo e extraia todos os registros de plantio que encontrar. Retorne APENAS um array JSON válido, sem nenhum texto adicional, sem markdown, sem explicações. Se um campo não existir no documento, use null. Para safra, normalize para: Verão, Inverno ou Safrinha. Para cultura, normalize para: Soja, Milho, Sorgo, Cevada, Batata, Trigo ou Feijão. Para datas, use formato YYYY-MM-DD. O formato de cada objeto deve ser: { talhao_nome, ano, safra_nome, cultura_nome, data_plantio, data_colheita, area_ha, volume_colhido, unidade_sigla, produtividade_sc_ha, agronomo_nome }.";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -135,6 +138,7 @@ function applyMapping(
       volume_colhido: parseNumber(c.volume_colhido ? row[c.volume_colhido] : null),
       unidade_sigla: lookupNorm(rawUnidade, norm.unidade_sigla) || null,
       produtividade_sc_ha: parseNumber(c.produtividade_sc_ha ? row[c.produtividade_sc_ha] : null),
+      agronomo_nome: c.agronomo_nome ? String(row[c.agronomo_nome] ?? "") || null : null,
     };
   });
 }

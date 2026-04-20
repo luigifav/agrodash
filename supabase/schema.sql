@@ -51,7 +51,8 @@ CREATE TABLE IF NOT EXISTS plantios (
   unidade_id          UUID            NOT NULL REFERENCES unidades(id),
   produtividade_sc_ha DECIMAL(10, 4),
   criado_em           TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
-  criado_por          UUID            REFERENCES auth.users(id)
+  criado_por          UUID            REFERENCES auth.users(id),
+  agronomo            TEXT
 );
 
 CREATE TABLE IF NOT EXISTS uploads (
