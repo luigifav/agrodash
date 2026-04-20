@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { Upload, Loader2, CheckCircle, XCircle } from "lucide-react";
+import { Upload, Loader2, CheckCircle, XCircle, FileText, FileSpreadsheet } from "lucide-react";
 
 type ParsedRow = {
   talhao_nome: string;
@@ -203,12 +203,15 @@ export default function UploadsPage() {
           <label className="flex flex-col items-center justify-center w-full h-36 border-2 border-dashed border-gray-300 rounded-xl cursor-pointer hover:border-green-500 hover:bg-green-50 transition-colors">
             <Upload className="w-8 h-8 text-gray-400 mb-2" />
             <span className="text-sm text-gray-600">
-              Clique para selecionar um arquivo <span className="font-semibold">.XLS</span> ou <span className="font-semibold">.XLSX</span>
+              Clique para selecionar um arquivo{" "}
+              <span className="font-semibold">.XLS</span>,{" "}
+              <span className="font-semibold">.XLSX</span> ou{" "}
+              <span className="font-semibold">.PDF</span>
             </span>
             <input
               ref={fileInputRef}
               type="file"
-              accept=".xls,.xlsx"
+              accept=".xls,.xlsx,.pdf"
               className="hidden"
               onChange={handleFileChange}
               disabled={loading || saving}
@@ -459,7 +462,22 @@ export default function UploadsPage() {
               <tbody>
                 {uploads.map((u) => (
                   <tr key={u.id} className="border-b border-gray-50 hover:bg-gray-50">
-                    <td className="px-5 py-3 font-medium text-gray-900">{u.nome_arquivo}</td>
+                    <td className="px-5 py-3">
+                      <div className="flex items-center gap-2">
+                        {u.nome_arquivo.toLowerCase().endsWith(".pdf") ? (
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-semibold bg-orange-100 text-orange-700">
+                            <FileText className="w-3 h-3" />
+                            PDF
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-semibold bg-green-100 text-green-700">
+                            <FileSpreadsheet className="w-3 h-3" />
+                            XLS
+                          </span>
+                        )}
+                        <span className="font-medium text-gray-900">{u.nome_arquivo}</span>
+                      </div>
+                    </td>
                     <td className="px-5 py-3">
                       <span
                         className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
