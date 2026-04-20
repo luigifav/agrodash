@@ -37,11 +37,8 @@ function BoundsController({ talhoes }: { talhoes: TalhaoMapData[] }) {
     if (features.length === 0) return
 
     try {
-      const bounds = L.geoJSON({
-        type: 'FeatureCollection',
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        features: features as any,
-      }).getBounds()
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const bounds = L.geoJSON({ type: 'FeatureCollection', features } as any).getBounds()
       if (bounds.isValid()) map.fitBounds(bounds, { padding: [20, 20] })
     } catch {
       // invalid geojson, use default view
