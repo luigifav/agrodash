@@ -206,7 +206,7 @@ export async function POST(request: NextRequest) {
     try {
       const message = await anthropic.messages.create({
         model: "claude-sonnet-4-6",
-        max_tokens: 32768,
+        max_tokens: 4096,
         system: PDF_SYSTEM,
         messages: [{ role: "user", content: `Aqui está o texto extraído do PDF:\n${pdfText.slice(0, 20000)}` }],
       });
