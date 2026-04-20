@@ -111,7 +111,7 @@ export async function POST(request: NextRequest) {
   let parsed: unknown;
   try {
     const message = await anthropic.messages.create({
-      model: "claude-sonnet-4-20250514",
+      model: "claude-sonnet-4-6",
       max_tokens: 8192,
       system: systemPrompt,
       messages: [
@@ -130,7 +130,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    parsed = JSON.parse(content.text);
+    const raw = content.text.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/, "");
+    parsed = JSON.parse(raw);
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Erro desconhecido";
     return NextResponse.json(
