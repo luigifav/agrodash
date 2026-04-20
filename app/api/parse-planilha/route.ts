@@ -205,7 +205,7 @@ export async function POST(request: NextRequest) {
 
     try {
       const message = await anthropic.messages.create({
-        model: "claude-sonnet-4-6",
+        model: "claude-haiku-4-5-20251001",
         max_tokens: 4096,
         system: PDF_SYSTEM,
         messages: [{ role: "user", content: `Aqui está o texto extraído do PDF:\n${pdfText.slice(0, 20000)}` }],
@@ -250,7 +250,7 @@ export async function POST(request: NextRequest) {
   let mapping: ColumnMapping;
   try {
     const message = await anthropic.messages.create({
-      model: "claude-sonnet-4-6",
+      model: "claude-haiku-4-5-20251001",
       max_tokens: 1024,
       system: XLSX_MAPPING_SYSTEM,
       messages: [
