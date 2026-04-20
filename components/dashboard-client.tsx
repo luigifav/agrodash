@@ -48,7 +48,7 @@ export function DashboardClient({ plantios, safras, talhoesAtivos }: Props) {
   const [filterSafra, setFilterSafra] = useState<string>('all')
 
   const years = useMemo(
-    () => [...new Set(plantios.map((p) => p.ano))].sort((a, b) => a - b),
+    () => Array.from(new Set(plantios.map((p) => p.ano))).sort((a, b) => a - b),
     [plantios]
   )
 
@@ -79,7 +79,7 @@ export function DashboardClient({ plantios, safras, talhoesAtivos }: Props) {
   }, [filtered])
 
   const allCulturesInData = useMemo(
-    () => [...new Set(plantios.map((p) => p.cultura))].sort(),
+    () => Array.from(new Set(plantios.map((p) => p.cultura))).sort(),
     [plantios]
   )
 

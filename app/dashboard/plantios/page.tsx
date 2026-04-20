@@ -31,14 +31,14 @@ export default async function PlantiosPage() {
     unidade: p.unidades?.sigla ?? "sc",
   }));
 
-  const anos = [...new Set(rows.map((p) => p.ano))].sort((a, b) => b - a);
-  const safras = [...new Set(rows.map((p) => p.safra))].filter(
+  const anos = Array.from(new Set(rows.map((p) => p.ano))).sort((a, b) => b - a);
+  const safras = Array.from(new Set(rows.map((p) => p.safra))).filter(
     (s) => s !== "—"
   );
-  const culturas = [...new Set(rows.map((p) => p.cultura))]
+  const culturas = Array.from(new Set(rows.map((p) => p.cultura)))
     .filter((c) => c !== "—")
     .sort();
-  const talhoes = [...new Set(rows.map((p) => p.talhao))]
+  const talhoes = Array.from(new Set(rows.map((p) => p.talhao)))
     .filter((t) => t !== "—")
     .sort();
 
