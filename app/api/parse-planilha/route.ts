@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import * as XLSX from "xlsx";
 import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@/lib/supabase/server";
-import { SAFRAS, CULTURAS, UNIDADES, AREA_UNIDADES } from "@/lib/constants";
+import { SAFRAS, CULTURAS } from "@/lib/constants";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
