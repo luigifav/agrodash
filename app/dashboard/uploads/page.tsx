@@ -1,21 +1,20 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { SAFRAS, CULTURAS, UNIDADES, AREA_UNIDADES, ALQ_TO_HA } from "@/lib/constants";
-import { Upload, Loader2, CheckCircle, XCircle, FileText, FileSpreadsheet, AlertCircle } from "lucide-react";
+import { Upload, Loader2, CheckCircle, XCircle, FileText, FileSpreadsheet, AlertTriangle } from "lucide-react";
 
 type ParsedRow = {
-  talhao_nome: string;
-  ano: number;
-  safra_nome: string;
-  cultura_nome: string;
-  data_plantio: string;
+  talhao_nome: string | null;
+  ano: number | null;
+  safra_nome: string | null;
+  cultura_nome: string | null;
+  data_plantio: string | null;
   data_colheita: string | null;
-  area_ha: number;
+  area_ha: number | null;
   area_unidade: string;
   volume_colhido: number | null;
-  unidade_sigla: string;
+  unidade_sigla: string | null;
   produtividade_sc_ha: number | null;
   agronomo_nome: string | null;
   latitude: number | null;
@@ -29,6 +28,12 @@ type UploadRecord = {
   criado_em: string;
 };
 
+const SAFRAS = ["Verão", "Inverno", "Safrinha"];
+const CULTURAS = ["Soja", "Milho", "Sorgo", "Cevada", "Batata", "Trigo", "Feijão"];
+const UNIDADES = ["sc", "t"];
+const AREA_UNIDADES = ["ha", "alq"];
+const ALQ_TO_HA = 2.42;
+
 export default function UploadsPage() {
   const supabase = createClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -39,19 +44,20 @@ export default function UploadsPage() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; msg: string } | null>(null);
+  const [truncatedInfo, setTruncatedInfo] = useState<{ total: number } | null>(null);
   const [rowErrors, setRowErrors] = useState<Record<number, string>>({});
 
-  const fetchUploads = useCallback(async () => {
+  useEffect(() => {
+    fetchUploads();
+  }, []);
+
+  async function fetchUploads() {
     const { data } = await supabase
       .from("uploads")
       .select("id, nome_arquivo, status, criado_em")
       .order("criado_em", { ascending: false });
     setUploads(data ?? []);
-  }, [supabase]);
-
-  useEffect(() => {
-    fetchUploads();
-  }, [fetchUploads]);
+  }
 
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -59,8 +65,9 @@ export default function UploadsPage() {
 
     setFileName(file.name);
     setRows([]);
-    setRowErrors({});
     setFeedback(null);
+    setTruncatedInfo(null);
+    setRowErrors({});
     setLoading(true);
 
     const formData = new FormData();
@@ -75,7 +82,17 @@ export default function UploadsPage() {
       if (!res.ok) {
         setFeedback({ type: "error", msg: data.error ?? "Erro ao processar planilha." });
       } else {
-        setRows(data as ParsedRow[]);
+        // A API retorna { rows, truncated, total_rows } para XLSX
+        // ou um array direto para PDF (legado)
+        if (Array.isArray(data)) {
+          setRows(data as ParsedRow[]);
+        } else {
+          const payload = data as { rows: ParsedRow[]; truncated: boolean; total_rows: number };
+          setRows(payload.rows ?? []);
+          if (payload.truncated) {
+            setTruncatedInfo({ total: payload.total_rows });
+          }
+        }
       }
     } catch {
       setFeedback({ type: "error", msg: "Erro de conexão ao processar planilha." });
@@ -91,6 +108,14 @@ export default function UploadsPage() {
       updated[index] = { ...updated[index], [field]: value };
       return updated;
     });
+    // Limpa o erro da linha editada
+    if (rowErrors[index]) {
+      setRowErrors((prev) => {
+        const next = { ...prev };
+        delete next[index];
+        return next;
+      });
+    }
   }
 
   async function handleSave() {
@@ -99,9 +124,8 @@ export default function UploadsPage() {
     setFeedback(null);
     setRowErrors({});
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    // Captura usuário uma única vez
+    const { data: { user } } = await supabase.auth.getUser();
 
     try {
       const [
@@ -121,13 +145,14 @@ export default function UploadsPage() {
       const unidadeMap = new Map((unidades ?? []).map((u) => [u.sigla, u.id]));
       const talhaoMap = new Map((talhoes ?? []).map((t) => [t.nome, t.id]));
 
-      // Collect unique talhao names that don't exist yet
+      // Cria talhões que ainda não existem
       const seen = new Set<string>();
       const newTalhaoNames: string[] = [];
       for (const r of rows) {
-        if (r.talhao_nome && !talhaoMap.has(r.talhao_nome) && !seen.has(r.talhao_nome)) {
-          seen.add(r.talhao_nome);
-          newTalhaoNames.push(r.talhao_nome);
+        const nome = r.talhao_nome?.trim();
+        if (nome && !talhaoMap.has(nome) && !seen.has(nome)) {
+          seen.add(nome);
+          newTalhaoNames.push(nome);
         }
       }
 
@@ -139,11 +164,12 @@ export default function UploadsPage() {
         if (error) throw new Error(`Erro ao criar talhões: ${error.message}`);
         (inserted ?? []).forEach((t: { id: string; nome: string }) => talhaoMap.set(t.nome, t.id));
 
-        // Upsert Point GeoJSON para talhões recém-criados que têm coordenadas
+        // Salva GeoJSON para talhões novos que têm coordenadas
         const talhaoCoordMap = new Map<string, { lat: number; lng: number }>();
         for (const r of rows) {
-          if (r.latitude != null && r.longitude != null && !talhaoCoordMap.has(r.talhao_nome)) {
-            talhaoCoordMap.set(r.talhao_nome, { lat: r.latitude, lng: r.longitude });
+          const nome = r.talhao_nome?.trim();
+          if (nome && r.latitude != null && r.longitude != null && !talhaoCoordMap.has(nome)) {
+            talhaoCoordMap.set(nome, { lat: r.latitude, lng: r.longitude });
           }
         }
         const geojsonUpdates = newTalhaoNames
@@ -159,16 +185,16 @@ export default function UploadsPage() {
       }
 
       const plantiosPayload = rows.map((r) => ({
-        talhao_id: talhaoMap.get(r.talhao_nome) ?? null,
-        cultura_id: culturaMap.get(r.cultura_nome) ?? null,
-        safra_id: safraMap.get(r.safra_nome) ?? null,
+        talhao_id: r.talhao_nome ? (talhaoMap.get(r.talhao_nome.trim()) ?? null) : null,
+        cultura_id: r.cultura_nome ? (culturaMap.get(r.cultura_nome) ?? null) : null,
+        safra_id: r.safra_nome ? (safraMap.get(r.safra_nome) ?? null) : null,
         ano: r.ano,
         data_plantio: r.data_plantio,
         data_colheita: r.data_colheita ?? null,
-        area_ha: r.area_unidade === "alq" ? r.area_ha * ALQ_TO_HA : r.area_ha,
+        area_ha: r.area_unidade === "alq" ? (r.area_ha ?? 0) * ALQ_TO_HA : r.area_ha,
         area_unidade: r.area_unidade,
         volume_colhido: r.volume_colhido ?? null,
-        unidade_id: unidadeMap.get(r.unidade_sigla) ?? null,
+        unidade_id: r.unidade_sigla ? (unidadeMap.get(r.unidade_sigla) ?? null) : null,
         produtividade_sc_ha: r.produtividade_sc_ha ?? null,
         agronomo: r.agronomo_nome ?? null,
         latitude: r.latitude ?? null,
@@ -176,33 +202,26 @@ export default function UploadsPage() {
         criado_por: user?.id ?? null,
       }));
 
-      const newErrors: Record<number, string> = {};
+      // Valida linha a linha e destaca erros
+      const newRowErrors: Record<number, string> = {};
       plantiosPayload.forEach((p, i) => {
-        const errors: string[] = [];
-        if (!p.talhao_id) errors.push("Talhão não encontrado");
-        if (!p.cultura_id) errors.push("Cultura inválida");
-        if (!p.safra_id) errors.push("Safra inválida");
-        if (!p.unidade_id) errors.push("Unidade não encontrada");
-        if (errors.length > 0) {
-          newErrors[i] = errors.join(", ");
-        }
+        const erros: string[] = [];
+        if (!p.talhao_id) erros.push("talhão");
+        if (!p.cultura_id) erros.push("cultura");
+        if (!p.safra_id) erros.push("safra");
+        if (!p.unidade_id) erros.push("unidade");
+        if (!p.data_plantio) erros.push("data plantio");
+        if (erros.length > 0) newRowErrors[i] = erros.join(", ");
       });
 
-      if (Object.keys(newErrors).length > 0) {
-        setRowErrors(newErrors);
-        setSaving(false);
-        return;
+      if (Object.keys(newRowErrors).length > 0) {
+        setRowErrors(newRowErrors);
+        throw new Error(
+          `${Object.keys(newRowErrors).length} linha(s) com campos obrigatórios em branco. Corrija as linhas destacadas em vermelho.`
+        );
       }
 
-      const { error: plantioError } = await supabase.from("plantios").insert(
-        plantiosPayload.map((p) => ({
-          ...p,
-          talhao_id: p.talhao_id!,
-          cultura_id: p.cultura_id!,
-          safra_id: p.safra_id!,
-          unidade_id: p.unidade_id!,
-        }))
-      );
+      const { error: plantioError } = await supabase.from("plantios").insert(plantiosPayload);
       if (plantioError) throw new Error(`Erro ao salvar plantios: ${plantioError.message}`);
 
       await supabase.from("uploads").insert({
@@ -214,6 +233,7 @@ export default function UploadsPage() {
       setFeedback({ type: "success", msg: `${rows.length} plantio(s) salvos com sucesso!` });
       setRows([]);
       setFileName(null);
+      setTruncatedInfo(null);
       setRowErrors({});
       await fetchUploads();
     } catch (err) {
@@ -231,11 +251,13 @@ export default function UploadsPage() {
     }
   }
 
+  const errorCount = Object.keys(rowErrors).length;
+
   return (
     <div className="p-8 space-y-8">
       <h1 className="text-2xl font-bold text-gray-900">Uploads</h1>
 
-      {/* Upload area */}
+      {/* Área de upload */}
       <div className="bg-white rounded-xl border border-gray-200">
         <div className="p-5 border-b border-gray-100">
           <h2 className="font-semibold text-gray-900">Importar Planilha</h2>
@@ -269,6 +291,16 @@ export default function UploadsPage() {
         </div>
       )}
 
+      {/* Aviso de truncamento */}
+      {truncatedInfo && (
+        <div className="flex items-start gap-3 p-4 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-sm">
+          <AlertTriangle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+          <span>
+            A planilha contém <strong>{truncatedInfo.total}</strong> linhas, mas apenas as primeiras <strong>500</strong> foram importadas.
+          </span>
+        </div>
+      )}
+
       {/* Feedback */}
       {feedback && (
         <div
@@ -287,31 +319,30 @@ export default function UploadsPage() {
         </div>
       )}
 
-      {/* Editable results table */}
+      {/* Tabela de resultados editável */}
       {rows.length > 0 && (
         <div className="bg-white rounded-xl border border-gray-200">
           <div className="flex items-center justify-between p-5 border-b border-gray-100">
             <div>
               <h2 className="font-semibold text-gray-900">Resultados Extraídos</h2>
               <p className="text-xs text-gray-500 mt-0.5">
-                {rows.length} registro(s) encontrado(s). Revise e corrija se necessário.
+                {rows.length} registro(s). Revise e corrija antes de salvar.
+                {errorCount > 0 && (
+                  <span className="ml-2 text-red-600 font-medium">
+                    {errorCount} linha(s) com campos obrigatórios em branco.
+                  </span>
+                )}
               </p>
             </div>
             <button
               onClick={handleSave}
-              disabled={saving || Object.keys(rowErrors).length > 0}
+              disabled={saving}
               className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors"
-              title={Object.keys(rowErrors).length > 0 ? `${Object.keys(rowErrors).length} linha(s) com erro` : undefined}
             >
               {saving ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
                   Salvando...
-                </>
-              ) : Object.keys(rowErrors).length > 0 ? (
-                <>
-                  <AlertCircle className="w-4 h-4" />
-                  {Object.keys(rowErrors).length} erro(s)
                 </>
               ) : (
                 "Confirmar e salvar"
@@ -337,9 +368,10 @@ export default function UploadsPage() {
                     "Agrônomo",
                     "Lat.",
                     "Long.",
-                  ].map((h) => (
+                    "",
+                  ].map((h, idx) => (
                     <th
-                      key={h}
+                      key={idx}
                       className="text-left px-3 py-2 font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap"
                     >
                       {h}
@@ -351,42 +383,32 @@ export default function UploadsPage() {
                 {rows.map((row, i) => (
                   <tr
                     key={i}
-                    className={`border-b ${
-                      rowErrors[i]
-                        ? "border-red-100 bg-red-50 hover:bg-red-100"
-                        : "border-gray-50 hover:bg-gray-50"
+                    className={`border-b border-gray-50 hover:bg-gray-50 ${
+                      rowErrors[i] ? "bg-red-50" : ""
                     }`}
                   >
                     <td className="px-2 py-1.5">
-                      <div className="flex items-center gap-1">
-                        <input
-                          className="w-28 border border-gray-200 rounded px-1.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-green-400"
-                          value={row.talhao_nome ?? ""}
-                          onChange={(e) => updateRow(i, "talhao_nome", e.target.value)}
-                        />
-                        {rowErrors[i] && (
-                          <div className="group relative">
-                            <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0" />
-                            <div className="absolute left-0 bottom-full mb-1 hidden group-hover:block bg-red-700 text-white text-xs rounded px-2 py-1 whitespace-nowrap z-10">
-                              {rowErrors[i]}
-                            </div>
-                          </div>
-                        )}
-                      </div>
+                      <input
+                        className="w-28 border border-gray-200 rounded px-1.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-green-400"
+                        value={row.talhao_nome ?? ""}
+                        onChange={(e) => updateRow(i, "talhao_nome", e.target.value || null)}
+                      />
                     </td>
                     <td className="px-2 py-1.5">
                       <input
                         type="number"
                         className="w-16 border border-gray-200 rounded px-1.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-green-400"
                         value={row.ano ?? ""}
-                        onChange={(e) => updateRow(i, "ano", parseInt(e.target.value) || 0)}
+                        onChange={(e) => updateRow(i, "ano", parseInt(e.target.value) || null)}
                       />
                     </td>
                     <td className="px-2 py-1.5">
                       <select
-                        className="border border-gray-200 rounded px-1.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-green-400"
+                        className={`border rounded px-1.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-green-400 ${
+                          !row.safra_nome ? "border-red-300 bg-red-50" : "border-gray-200"
+                        }`}
                         value={row.safra_nome ?? ""}
-                        onChange={(e) => updateRow(i, "safra_nome", e.target.value)}
+                        onChange={(e) => updateRow(i, "safra_nome", e.target.value || null)}
                       >
                         <option value="">--</option>
                         {SAFRAS.map((s) => (
@@ -396,9 +418,11 @@ export default function UploadsPage() {
                     </td>
                     <td className="px-2 py-1.5">
                       <select
-                        className="border border-gray-200 rounded px-1.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-green-400"
+                        className={`border rounded px-1.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-green-400 ${
+                          !row.cultura_nome ? "border-red-300 bg-red-50" : "border-gray-200"
+                        }`}
                         value={row.cultura_nome ?? ""}
-                        onChange={(e) => updateRow(i, "cultura_nome", e.target.value)}
+                        onChange={(e) => updateRow(i, "cultura_nome", e.target.value || null)}
                       >
                         <option value="">--</option>
                         {CULTURAS.map((c) => (
@@ -409,9 +433,11 @@ export default function UploadsPage() {
                     <td className="px-2 py-1.5">
                       <input
                         type="date"
-                        className="border border-gray-200 rounded px-1.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-green-400"
+                        className={`border rounded px-1.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-green-400 ${
+                          !row.data_plantio ? "border-red-300 bg-red-50" : "border-gray-200"
+                        }`}
                         value={row.data_plantio ?? ""}
-                        onChange={(e) => updateRow(i, "data_plantio", e.target.value)}
+                        onChange={(e) => updateRow(i, "data_plantio", e.target.value || null)}
                       />
                     </td>
                     <td className="px-2 py-1.5">
@@ -431,7 +457,7 @@ export default function UploadsPage() {
                         className="w-20 border border-gray-200 rounded px-1.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-green-400"
                         value={row.area_ha ?? ""}
                         onChange={(e) =>
-                          updateRow(i, "area_ha", parseFloat(e.target.value) || 0)
+                          updateRow(i, "area_ha", parseFloat(e.target.value) || null)
                         }
                       />
                     </td>
@@ -443,12 +469,17 @@ export default function UploadsPage() {
                           const newUnit = e.target.value;
                           const oldUnit = row.area_unidade ?? "ha";
                           if (newUnit === oldUnit) return;
+                          const area = row.area_ha ?? 0;
                           const converted = newUnit === "ha"
-                            ? row.area_ha * ALQ_TO_HA
-                            : row.area_ha / ALQ_TO_HA;
+                            ? area * ALQ_TO_HA
+                            : area / ALQ_TO_HA;
                           setRows((prev) => {
                             const updated = [...prev];
-                            updated[i] = { ...updated[i], area_unidade: newUnit, area_ha: Math.round(converted * 10000) / 10000 };
+                            updated[i] = {
+                              ...updated[i],
+                              area_unidade: newUnit,
+                              area_ha: Math.round(converted * 10000) / 10000,
+                            };
                             return updated;
                           });
                         }}
@@ -473,9 +504,11 @@ export default function UploadsPage() {
                     </td>
                     <td className="px-2 py-1.5">
                       <select
-                        className="border border-gray-200 rounded px-1.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-green-400"
+                        className={`border rounded px-1.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-green-400 ${
+                          !row.unidade_sigla ? "border-red-300 bg-red-50" : "border-gray-200"
+                        }`}
                         value={row.unidade_sigla ?? ""}
-                        onChange={(e) => updateRow(i, "unidade_sigla", e.target.value)}
+                        onChange={(e) => updateRow(i, "unidade_sigla", e.target.value || null)}
                       >
                         <option value="">--</option>
                         {UNIDADES.map((u) => (
@@ -529,6 +562,11 @@ export default function UploadsPage() {
                         }
                       />
                     </td>
+                    <td className="px-2 py-1.5 text-red-600 whitespace-nowrap text-xs">
+                      {rowErrors[i] && (
+                        <span title={rowErrors[i]}>⚠ {rowErrors[i]}</span>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -537,19 +575,13 @@ export default function UploadsPage() {
           <div className="flex justify-end p-4 border-t border-gray-100">
             <button
               onClick={handleSave}
-              disabled={saving || Object.keys(rowErrors).length > 0}
+              disabled={saving}
               className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors"
-              title={Object.keys(rowErrors).length > 0 ? `${Object.keys(rowErrors).length} linha(s) com erro` : undefined}
             >
               {saving ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
                   Salvando...
-                </>
-              ) : Object.keys(rowErrors).length > 0 ? (
-                <>
-                  <AlertCircle className="w-4 h-4" />
-                  {Object.keys(rowErrors).length} erro(s)
                 </>
               ) : (
                 "Confirmar e salvar"
@@ -559,7 +591,7 @@ export default function UploadsPage() {
         </div>
       )}
 
-      {/* Upload history */}
+      {/* Histórico de uploads */}
       <div className="bg-white rounded-xl border border-gray-200">
         <div className="p-5 border-b border-gray-100">
           <h2 className="font-semibold text-gray-900">Histórico de Uploads</h2>
