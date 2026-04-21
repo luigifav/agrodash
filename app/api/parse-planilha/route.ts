@@ -317,15 +317,16 @@ async function parseAIJson<T>(
   context: string
 ): Promise<T> {
   const attempt = async (extraInstruction?: string) => {
-    const p = extraInstruction
-      ? {
-          ...params,
-          messages: [
+    const p = {
+      ...params,
+      stream: false,
+      messages: extraInstruction
+        ? [
             ...params.messages,
             { role: "assistant" as const, content: extraInstruction },
-          ],
-        }
-      : params;
+          ]
+        : params.messages,
+    };
     const msg = await anthropic.messages.create(p);
     const content = msg.content[0];
     if (content.type !== "text") throw new Error("Resposta inesperada da IA");
