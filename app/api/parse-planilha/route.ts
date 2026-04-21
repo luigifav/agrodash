@@ -181,15 +181,17 @@ function applyMapping(
       ano = parseInt(dataPlantio.slice(0, 4));
     }
 
-    let talhao_nome = "";
+    let talhao_nome: string | null = null;
     if (talhao_from_concat && talhao_concat_columns?.length) {
-      talhao_nome = talhao_concat_columns
+      const joined = talhao_concat_columns
         .map((col) => String(row[col] ?? "").trim())
         .filter(Boolean)
         .join(" ");
-    } else {
-      talhao_nome = c.talhao_nome ? String(row[c.talhao_nome] ?? "") : "";
+      talhao_nome = joined || null;
+    } else if (!talhao_from_concat) {
+      talhao_nome = c.talhao_nome ? String(row[c.talhao_nome] ?? "") || null : null;
     }
+    // talhao_from_concat true mas talhao_concat_columns vazio/indefinido → talhao_nome permanece null
 
     const rawSafra = c.safra_nome ? String(row[c.safra_nome] ?? "") : "";
     const rawCultura = c.cultura_nome ? String(row[c.cultura_nome] ?? "") : "";
