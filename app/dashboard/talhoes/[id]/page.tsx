@@ -16,7 +16,15 @@ import {
 import type { Tables } from '@/lib/database.types';
 
 type Talhao = Tables<'talhoes'>;
-type Plantio = Tables<'plantios'> & {
+type PlantioData = {
+  id: string;
+  talhao_id: string;
+  ano: number;
+  data_plantio: string;
+  data_colheita: string | null;
+  area_ha: number;
+  volume_colhido: number | null;
+  produtividade_sc_ha: number | null;
   culturas: { nome: string } | null;
   safras: { nome: string } | null;
 };
@@ -27,7 +35,7 @@ interface PageProps {
 
 export default function TalhaoDetailPage({ params }: PageProps) {
   const [talhao, setTalhao] = useState<Talhao | null>(null);
-  const [plantios, setPlantios] = useState<Plantio[]>([]);
+  const [plantios, setPlantios] = useState<PlantioData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [id, setId] = useState<string | null>(null);
@@ -105,12 +113,17 @@ export default function TalhaoDetailPage({ params }: PageProps) {
   // Extract coordinates from geojson if available
   let coordinates: { lat: string; lon: string } | null = null;
   if (talhao.geojson) {
-    const geojson = talhao.geojson as any;
+    const geojson = talhao.geojson as Record<string, unknown>;
+    const geometry = geojson.geometry as Record<string, unknown>;
     if (
-      geojson.geometry?.type === 'Polygon' &&
-      geojson.geometry?.coordinates?.[0]?.[0]
+      geometry?.type === 'Polygon' &&
+      Array.isArray(geometry.coordinates) &&
+      Array.isArray(geometry.coordinates[0]) &&
+      Array.isArray(geometry.coordinates[0][0]) &&
+      geometry.coordinates[0][0].length >= 2
     ) {
-      const [lon, lat] = geojson.geometry.coordinates[0][0];
+      const coords = geometry.coordinates[0][0] as number[];
+      const [lon, lat] = [coords[0], coords[1]];
       coordinates = { lat: lat.toFixed(4), lon: lon.toFixed(4) };
     }
   }
@@ -130,12 +143,13 @@ export default function TalhaoDetailPage({ params }: PageProps) {
     .reduce(
       (acc, p) => {
         const existing = acc.find((item) => item.ano === p.ano);
+        const produtividade = p.produtividade_sc_ha as number;
         if (existing) {
-          existing.produtividade = (existing.produtividade + p.produtividade_sc_ha) / 2;
+          existing.produtividade = (existing.produtividade + produtividade) / 2;
         } else {
           acc.push({
             ano: p.ano,
-            produtividade: p.produtividade_sc_ha,
+            produtividade,
           });
         }
         return acc;
