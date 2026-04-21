@@ -15,6 +15,7 @@ import {
   Cell,
 } from 'recharts'
 import { MapPin, Sprout, BarChart3, TrendingUp } from 'lucide-react'
+import type { ResumoProducao } from '@/lib/database.types'
 
 export const CULTURE_COLORS: Record<string, string> = {
   Soja: '#16a34a',
@@ -26,69 +27,55 @@ export const CULTURE_COLORS: Record<string, string> = {
   Feijão: '#78350f',
 }
 
-export type PlantioData = {
-  id: string
-  ano: number
-  area_ha: number
-  volume_colhido: number | null
-  produtividade_sc_ha: number | null
-  cultura: string
-  safra: string
-  talhao: string
-}
-
 type Props = {
-  plantios: PlantioData[]
-  safras: string[]
+  resumo: ResumoProducao[]
   talhoesAtivos: number
 }
 
-export function DashboardClient({ plantios, safras, talhoesAtivos }: Props) {
+export function DashboardClient({ resumo, talhoesAtivos }: Props) {
   const [filterAno, setFilterAno] = useState<string>('all')
-  const [filterSafra, setFilterSafra] = useState<string>('all')
 
   const years = useMemo(
-    () => Array.from(new Set(plantios.map((p) => p.ano))).sort((a, b) => a - b),
-    [plantios]
+    () => Array.from(new Set(resumo.map((r) => r.ano))).sort((a, b) => a - b),
+    [resumo]
   )
 
   const filtered = useMemo(
     () =>
-      plantios.filter((p) => {
-        if (filterAno !== 'all' && p.ano !== Number(filterAno)) return false
-        if (filterSafra !== 'all' && p.safra !== filterSafra) return false
-        return true
-      }),
-    [plantios, filterAno, filterSafra]
+      filterAno === 'all'
+        ? resumo
+        : resumo.filter((r) => r.ano === Number(filterAno)),
+    [resumo, filterAno]
   )
 
   const stats = useMemo(() => {
-    const totalArea = filtered.reduce((s, p) => s + (p.area_ha || 0), 0)
-    const prodValues = filtered.flatMap((p) =>
-      p.produtividade_sc_ha != null ? [p.produtividade_sc_ha] : []
+    const totalArea = filtered.reduce((s, r) => s + r.total_area, 0)
+    const totalVolume = filtered.reduce((s, r) => s + (r.total_volume ?? 0), 0)
+    const prodValues = filtered.flatMap((r) =>
+      r.avg_produtividade != null ? [r.avg_produtividade] : []
     )
     const avgProd =
       prodValues.length > 0
         ? prodValues.reduce((a, b) => a + b, 0) / prodValues.length
         : 0
     return {
-      totalPlantios: filtered.length,
       totalArea: totalArea.toFixed(1),
+      totalVolume: totalVolume.toFixed(1),
       avgProd: avgProd.toFixed(1),
     }
   }, [filtered])
 
   const allCulturesInData = useMemo(
-    () => Array.from(new Set(plantios.map((p) => p.cultura))).sort(),
-    [plantios]
+    () => Array.from(new Set(resumo.map((r) => r.cultura))).sort(),
+    [resumo]
   )
 
   const barData: Array<Record<string, number>> = useMemo(() => {
     const grouped: Record<number, Record<string, number>> = {}
-    filtered.forEach((p) => {
-      if (!grouped[p.ano]) grouped[p.ano] = {}
-      grouped[p.ano][p.cultura] =
-        (grouped[p.ano][p.cultura] || 0) + (p.volume_colhido || 0)
+    filtered.forEach((r) => {
+      if (!grouped[r.ano]) grouped[r.ano] = {}
+      grouped[r.ano][r.cultura] =
+        (grouped[r.ano][r.cultura] ?? 0) + (r.total_volume ?? 0)
     })
     return Object.entries(grouped)
       .sort(([a], [b]) => Number(a) - Number(b))
@@ -97,30 +84,21 @@ export function DashboardClient({ plantios, safras, talhoesAtivos }: Props) {
 
   const donutData = useMemo(() => {
     const recentYear =
-      filtered.length > 0 ? Math.max(...filtered.map((p) => p.ano)) : null
+      filtered.length > 0 ? Math.max(...filtered.map((r) => r.ano)) : null
     const src =
-      recentYear != null ? filtered.filter((p) => p.ano === recentYear) : filtered
-    const grouped: Record<string, number> = {}
-    src.forEach((p) => {
-      grouped[p.cultura] = (grouped[p.cultura] || 0) + (p.area_ha || 0)
-    })
-    return Object.entries(grouped).map(([name, value]) => ({
-      name,
-      value: Number(value.toFixed(2)),
+      recentYear != null ? filtered.filter((r) => r.ano === recentYear) : filtered
+    return src.map((r) => ({
+      name: r.cultura,
+      value: Number(r.total_area.toFixed(2)),
     }))
   }, [filtered])
-
-  const recentPlantios = useMemo(
-    () => [...filtered].sort((a, b) => b.ano - a.ano).slice(0, 10),
-    [filtered]
-  )
 
   const culturesInBar = allCulturesInData.filter((c) =>
     barData.some((d) => c in d)
   )
 
   const donutYear =
-    filtered.length > 0 ? Math.max(...filtered.map((p) => p.ano)) : null
+    filtered.length > 0 ? Math.max(...filtered.map((r) => r.ano)) : null
 
   const statCards = [
     {
@@ -131,18 +109,18 @@ export function DashboardClient({ plantios, safras, talhoesAtivos }: Props) {
       bg: 'bg-green-50',
     },
     {
-      label: 'Total Plantios',
-      value: stats.totalPlantios,
-      icon: Sprout,
-      color: 'text-blue-600',
-      bg: 'bg-blue-50',
-    },
-    {
       label: 'Área Total',
       value: `${stats.totalArea} ha`,
       icon: BarChart3,
       color: 'text-amber-600',
       bg: 'bg-amber-50',
+    },
+    {
+      label: 'Volume Total',
+      value: `${stats.totalVolume} sc`,
+      icon: Sprout,
+      color: 'text-blue-600',
+      bg: 'bg-blue-50',
     },
     {
       label: 'Produtividade Média',
@@ -155,6 +133,11 @@ export function DashboardClient({ plantios, safras, talhoesAtivos }: Props) {
 
   const selectClass =
     'px-3 py-2 rounded-lg border border-gray-200 text-sm bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-green-500'
+
+  const tableRows = useMemo(
+    () => [...filtered].sort((a, b) => b.ano - a.ano || a.cultura.localeCompare(b.cultura)),
+    [filtered]
+  )
 
   return (
     <>
@@ -169,18 +152,6 @@ export function DashboardClient({ plantios, safras, talhoesAtivos }: Props) {
           {years.map((y) => (
             <option key={y} value={String(y)}>
               {y}
-            </option>
-          ))}
-        </select>
-        <select
-          value={filterSafra}
-          onChange={(e) => setFilterSafra(e.target.value)}
-          className={selectClass}
-        >
-          <option value="all">Todas as safras</option>
-          {safras.map((s) => (
-            <option key={s} value={s}>
-              {s}
             </option>
           ))}
         </select>
@@ -287,27 +258,27 @@ export function DashboardClient({ plantios, safras, talhoesAtivos }: Props) {
         </div>
       </div>
 
-      {/* Recent plantios */}
+      {/* Summary table */}
       <div className="bg-white rounded-xl border border-gray-200">
         <div className="p-5 border-b border-gray-100">
-          <h2 className="font-semibold text-gray-900">Últimos Plantios</h2>
+          <h2 className="font-semibold text-gray-900">Resumo de Produção</h2>
         </div>
-        {recentPlantios.length === 0 ? (
+        {tableRows.length === 0 ? (
           <div className="p-12 text-center text-gray-400">
             <Sprout className="w-10 h-10 mx-auto mb-3 opacity-40" />
-            <p>Nenhum plantio encontrado.</p>
+            <p>Nenhum dado encontrado.</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-100">
-                  {['Talhão', 'Cultura', 'Safra', 'Ano', 'Área (ha)', 'Produtividade'].map(
+                  {['Ano', 'Cultura', 'Área Total (ha)', 'Volume Total (sc)', 'Prod. Média (sc/ha)'].map(
                     (h, i) => (
                       <th
                         key={h}
                         className={`px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider ${
-                          i >= 4 ? 'text-right' : 'text-left'
+                          i >= 2 ? 'text-right' : 'text-left'
                         }`}
                       >
                         {h}
@@ -317,21 +288,22 @@ export function DashboardClient({ plantios, safras, talhoesAtivos }: Props) {
                 </tr>
               </thead>
               <tbody>
-                {recentPlantios.map((p) => (
+                {tableRows.map((r) => (
                   <tr
-                    key={p.id}
+                    key={`${r.ano}-${r.cultura}`}
                     className="border-b border-gray-50 hover:bg-gray-50"
                   >
-                    <td className="px-5 py-3 text-gray-900">{p.talhao}</td>
-                    <td className="px-5 py-3 text-gray-600">{p.cultura}</td>
-                    <td className="px-5 py-3 text-gray-600">{p.safra}</td>
-                    <td className="px-5 py-3 text-gray-600">{p.ano}</td>
+                    <td className="px-5 py-3 text-gray-900">{r.ano}</td>
+                    <td className="px-5 py-3 text-gray-600">{r.cultura}</td>
                     <td className="px-5 py-3 text-right text-gray-600">
-                      {Number(p.area_ha).toFixed(1)}
+                      {r.total_area.toFixed(1)}
                     </td>
                     <td className="px-5 py-3 text-right text-gray-600">
-                      {p.produtividade_sc_ha != null
-                        ? `${Number(p.produtividade_sc_ha).toFixed(1)} sc/ha`
+                      {r.total_volume != null ? r.total_volume.toFixed(1) : '—'}
+                    </td>
+                    <td className="px-5 py-3 text-right text-gray-600">
+                      {r.avg_produtividade != null
+                        ? `${r.avg_produtividade.toFixed(1)}`
                         : '—'}
                     </td>
                   </tr>
