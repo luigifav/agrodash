@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { PlantiosClient } from "@/components/plantios-client";
 import type { PlantioRow } from "@/components/plantios-client";
+import type { PlantioComDetalhes } from "@/lib/database.types";
 
 export default async function PlantiosPage() {
   const supabase = await createClient();
@@ -16,8 +17,7 @@ export default async function PlantiosPage() {
     .order("ano", { ascending: false })
     .order("data_plantio", { ascending: false });
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const rows: PlantioRow[] = (plantios ?? []).map((p: any) => ({
+  const rows: PlantioRow[] = (plantios as PlantioComDetalhes[] ?? []).map((p) => ({
     id: p.id,
     ano: p.ano,
     data_plantio: p.data_plantio ?? null,

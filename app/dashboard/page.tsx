@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { DashboardClient } from "@/components/dashboard-client";
 import type { PlantioData } from "@/components/dashboard-client";
+import type { PlantioComResumo, Tables } from "@/lib/database.types";
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -17,8 +18,7 @@ export default async function DashboardPage() {
     supabase.from("safras").select("nome").order("id"),
   ]);
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const plantios: PlantioData[] = (plantiosRes.data ?? []).map((p: any) => ({
+  const plantios: PlantioData[] = (plantiosRes.data as PlantioComResumo[] ?? []).map((p) => ({
     id: p.id,
     ano: p.ano,
     area_ha: Number(p.area_ha) || 0,
@@ -30,8 +30,9 @@ export default async function DashboardPage() {
     talhao: p.talhoes?.nome ?? "—",
   }));
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const safras: string[] = (safrasRes.data ?? []).map((s: any) => s.nome);
+  const safras: string[] = (safrasRes.data as Pick<Tables<"safras">, "nome">[] ?? []).map(
+    (s) => s.nome
+  );
 
   return (
     <div className="p-8">
