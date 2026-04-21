@@ -32,6 +32,13 @@ type ColumnMapping = {
   ano_from_plantio?: boolean;
   talhao_from_concat?: boolean;
   talhao_concat_columns?: string[];
+  default_values?: {
+    cultura_nome?: string | null;
+    safra_nome?: string | null;
+    unidade_sigla?: string | null;
+    ano?: number | null;
+  };
+  produtividade_unit?: "sc_ha" | "sc_alq";
 };
 
 // ── System prompts ─────────────────────────────────────────────────────────────
@@ -58,24 +65,34 @@ Formato exato:
     "longitude": "nome exato da coluna ou null"
   },
   "normalizations": {
-    "safra_nome": { "valor_exato_da_planilha": "${SAFRAS.join("|")}" },
-    "cultura_nome": { "valor_exato_da_planilha": "${CULTURAS.join("|")}" },
-    "unidade_sigla": { "valor_exato_da_planilha": "${UNIDADES.join("|")}" },
-    "area_unidade": { "valor_exato_da_planilha": "${AREA_UNIDADES.join("|")}" }
+    "safra_nome": { "valor_exato": "Verão|Inverno|Safrinha" },
+    "cultura_nome": { "valor_exato": "Soja|Milho|Sorgo|Cevada|Batata|Trigo|Feijão" },
+    "unidade_sigla": { "valor_exato": "sc|t" },
+    "area_unidade": { "valor_exato": "alq|ha" }
   },
+  "default_values": {
+    "cultura_nome": null,
+    "safra_nome": null,
+    "unidade_sigla": null,
+    "ano": null
+  },
+  "produtividade_unit": "sc_ha",
   "ano_from_plantio": false,
   "talhao_from_concat": false,
   "talhao_concat_columns": []
 }
 
-Regras:
-- Se não houver coluna de ano separada, defina ano_from_plantio: true
-- Se o talhão for formado pela junção de múltiplas colunas (ex: Propriedade + nome do pivô), defina talhao_from_concat: true e liste as colunas em talhao_concat_columns (ex: ["Propriedade", "Pivot"])
-- Se a área estiver em alqueires (coluna "Alq", "Alqueire", "Alqueires" ou similar), normalize area_unidade para "alq"
-- Se a área estiver em hectares, normalize area_unidade para "ha"
-- Para colunas de coordenadas em qualquer formato (decimal ou grau-minuto-segundo), mapeie latitude e longitude
+Regras CRÍTICAS de mapeamento de colunas:
+- "cultura_nome" deve ser mapeado para uma coluna que contenha o TIPO de cultivo (Soja, Milho, Trigo etc.), NÃO para colunas de variedade/cultivar (ex: "Variedade", "Cultivar", "Varietal" devem ser null para cultura_nome — elas contêm nomes de sementes como "LG 60162", não a cultura)
+- Se não existir coluna de cultura_nome mas TODOS os valores de amostra indicarem a mesma cultura (ex: variedades de soja como "LG 60162 IPRO", "BMX ZEUS IPRO"), infira a cultura e coloque em default_values.cultura_nome (ex: "Soja")
+- Se não existir coluna de safra_nome mas as datas de plantio indicarem uma época (out-mar = "Verão", abr-jun = "Safrinha", jul-set = "Inverno"), infira e coloque em default_values.safra_nome
+- Se não existir coluna de unidade_sigla mas a área estiver em alqueires (Alq), defina default_values.unidade_sigla como "sc" (padrão para soja/grãos)
+- Se não existir coluna de ano mas houver data_plantio, defina ano_from_plantio: true
+- Se a produtividade for por alqueire (coluna "Prod./Alq.", "Prod/Alq" ou similar), defina produtividade_unit: "sc_alq" (o sistema vai converter dividindo por 2.42)
+- Se o talhão for formado por múltiplas colunas (ex: Local + Propriedade), use talhao_from_concat: true com as colunas em talhao_concat_columns
+- Se a área estiver em alqueires, normalize area_unidade para "alq"; se em hectares, para "ha"
 - normalizations deve cobrir TODOS os valores únicos encontrados nas amostras
-- Campos não encontrados: use null`;
+- Campos não encontrados e não inferíveis: use null`;
 
 const PDF_SYSTEM = `Você é um parser de relatórios agrícolas brasileiros em PDF. O texto abaixo foi extraído de um PDF que pode ser uma tabela, relatório ou planilha exportada. Analise o conteúdo e extraia todos os registros de plantio que encontrar.
 
@@ -168,6 +185,7 @@ function applyMapping(
   mapping: ColumnMapping
 ) {
   const { columns: c, normalizations: norm = {}, ano_from_plantio, talhao_from_concat, talhao_concat_columns } = mapping;
+  const ALQ_TO_HA = 2.42;
 
   return rows.map((row) => {
     const dataPlantio = parseDate(c.data_plantio ? row[c.data_plantio] : null);
@@ -200,18 +218,27 @@ function applyMapping(
     const rawAreaUnidade = c.area_unidade ? String(row[c.area_unidade] ?? "") : "";
     const area_unidade = lookupNorm(rawAreaUnidade, norm.area_unidade) || "ha";
 
+    const safra_nome = lookupNorm(rawSafra, norm.safra_nome) || mapping.default_values?.safra_nome || null;
+    const cultura_nome = lookupNorm(rawCultura, norm.cultura_nome) || mapping.default_values?.cultura_nome || null;
+    const unidade_sigla = lookupNorm(rawUnidade, norm.unidade_sigla) || mapping.default_values?.unidade_sigla || null;
+
+    let produtividade = parseNumber(c.produtividade_sc_ha ? row[c.produtividade_sc_ha] : null);
+    if (produtividade != null && mapping.produtividade_unit === "sc_alq") {
+      produtividade = Math.round((produtividade / ALQ_TO_HA) * 100) / 100;
+    }
+
     return {
       talhao_nome,
       ano,
-      safra_nome: lookupNorm(rawSafra, norm.safra_nome) || null,
-      cultura_nome: lookupNorm(rawCultura, norm.cultura_nome) || null,
+      safra_nome,
+      cultura_nome,
       data_plantio: dataPlantio,
       data_colheita: dataColheita,
       area_ha: parseNumber(c.area_ha ? row[c.area_ha] : null),
       area_unidade,
       volume_colhido: parseNumber(c.volume_colhido ? row[c.volume_colhido] : null),
-      unidade_sigla: lookupNorm(rawUnidade, norm.unidade_sigla) || null,
-      produtividade_sc_ha: parseNumber(c.produtividade_sc_ha ? row[c.produtividade_sc_ha] : null),
+      unidade_sigla,
+      produtividade_sc_ha: produtividade,
       agronomo_nome: c.agronomo_nome ? String(row[c.agronomo_nome] ?? "") || null : null,
       latitude: parseCoordenada(c.latitude ? row[c.latitude] : null),
       longitude: parseCoordenada(c.longitude ? row[c.longitude] : null),
