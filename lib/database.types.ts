@@ -207,7 +207,18 @@ export type Database = {
       };
     };
     Views: Record<string, never>;
-    Functions: Record<string, never>;
+    Functions: {
+      resumo_producao_por_ano_cultura: {
+        Args: Record<PropertyKey, never>;
+        Returns: {
+          ano: number;
+          cultura: string;
+          total_area: number;
+          total_volume: number | null;
+          avg_produtividade: number | null;
+        }[];
+      };
+    };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;
   };
@@ -216,14 +227,13 @@ export type Database = {
 export type Tables<T extends keyof Database["public"]["Tables"]> =
   Database["public"]["Tables"][T]["Row"];
 
-/** Resultado do SELECT de plantios com joins, usado no dashboard. */
-export type PlantioComResumo = Pick<
-  Tables<"plantios">,
-  "id" | "ano" | "area_ha" | "volume_colhido" | "produtividade_sc_ha"
-> & {
-  talhoes: Pick<Tables<"talhoes">, "nome"> | null;
-  culturas: Pick<Tables<"culturas">, "nome"> | null;
-  safras: Pick<Tables<"safras">, "nome"> | null;
+/** Resultado da RPC resumo_producao_por_ano_cultura, usado no dashboard. */
+export type ResumoProducao = {
+  ano: number;
+  cultura: string;
+  total_area: number;
+  total_volume: number | null;
+  avg_produtividade: number | null;
 };
 
 /** Resultado do SELECT de plantios com joins, usado na página /plantios. */

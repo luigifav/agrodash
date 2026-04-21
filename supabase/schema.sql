@@ -203,3 +203,33 @@ CREATE POLICY "uploads_update" ON uploads FOR UPDATE TO authenticated
 
 CREATE POLICY "uploads_delete" ON uploads FOR DELETE TO authenticated
   USING ((auth.jwt() -> 'app_metadata' ->> 'role') = 'admin');
+
+-- ============================================================
+-- RPC FUNCTIONS
+-- ============================================================
+
+CREATE OR REPLACE FUNCTION resumo_producao_por_ano_cultura()
+RETURNS TABLE (
+  ano            INT,
+  cultura        TEXT,
+  total_area     NUMERIC,
+  total_volume   NUMERIC,
+  avg_produtividade NUMERIC
+)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+AS $$
+  SELECT
+    plantios.ano,
+    culturas.nome        AS cultura,
+    SUM(area_ha)         AS total_area,
+    SUM(volume_colhido)  AS total_volume,
+    AVG(produtividade_sc_ha) AS avg_produtividade
+  FROM plantios
+  JOIN culturas ON cultura_id = culturas.id
+  GROUP BY plantios.ano, culturas.nome
+  ORDER BY plantios.ano;
+$$;
+
+GRANT EXECUTE ON FUNCTION resumo_producao_por_ano_cultura() TO authenticated;
