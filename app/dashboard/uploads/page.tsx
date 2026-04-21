@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { Upload, Loader2, CheckCircle, XCircle, FileText, FileSpreadsheet } from "lucide-react";
+import { Upload, Loader2, CheckCircle, XCircle, FileText, FileSpreadsheet, AlertCircle } from "lucide-react";
 
 type ParsedRow = {
   talhao_nome: string;
@@ -44,6 +44,7 @@ export default function UploadsPage() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; msg: string } | null>(null);
+  const [rowErrors, setRowErrors] = useState<Record<number, string>>({});
 
   useEffect(() => {
     fetchUploads();
@@ -63,6 +64,7 @@ export default function UploadsPage() {
 
     setFileName(file.name);
     setRows([]);
+    setRowErrors({});
     setFeedback(null);
     setLoading(true);
 
@@ -100,6 +102,7 @@ export default function UploadsPage() {
     if (rows.length === 0 || !fileName) return;
     setSaving(true);
     setFeedback(null);
+    setRowErrors({});
 
     const {
       data: { user },
@@ -178,13 +181,22 @@ export default function UploadsPage() {
         criado_por: user?.id ?? null,
       }));
 
-      const missing = plantiosPayload.filter(
-        (p) => !p.talhao_id || !p.cultura_id || !p.safra_id || !p.unidade_id
-      );
-      if (missing.length > 0) {
-        throw new Error(
-          `${missing.length} registro(s) com campos obrigatórios inválidos (talhão, cultura, safra ou unidade não encontrados).`
-        );
+      const newErrors: Record<number, string> = {};
+      plantiosPayload.forEach((p, i) => {
+        const errors: string[] = [];
+        if (!p.talhao_id) errors.push("Talhão não encontrado");
+        if (!p.cultura_id) errors.push("Cultura inválida");
+        if (!p.safra_id) errors.push("Safra inválida");
+        if (!p.unidade_id) errors.push("Unidade não encontrada");
+        if (errors.length > 0) {
+          newErrors[i] = errors.join(", ");
+        }
+      });
+
+      if (Object.keys(newErrors).length > 0) {
+        setRowErrors(newErrors);
+        setSaving(false);
+        return;
       }
 
       const { error: plantioError } = await supabase.from("plantios").insert(plantiosPayload);
@@ -199,6 +211,7 @@ export default function UploadsPage() {
       setFeedback({ type: "success", msg: `${rows.length} plantio(s) salvos com sucesso!` });
       setRows([]);
       setFileName(null);
+      setRowErrors({});
       await fetchUploads();
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Erro desconhecido";
@@ -283,13 +296,19 @@ export default function UploadsPage() {
             </div>
             <button
               onClick={handleSave}
-              disabled={saving}
+              disabled={saving || Object.keys(rowErrors).length > 0}
               className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors"
+              title={Object.keys(rowErrors).length > 0 ? `${Object.keys(rowErrors).length} linha(s) com erro` : undefined}
             >
               {saving ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
                   Salvando...
+                </>
+              ) : Object.keys(rowErrors).length > 0 ? (
+                <>
+                  <AlertCircle className="w-4 h-4" />
+                  {Object.keys(rowErrors).length} erro(s)
                 </>
               ) : (
                 "Confirmar e salvar"
@@ -327,13 +346,30 @@ export default function UploadsPage() {
               </thead>
               <tbody>
                 {rows.map((row, i) => (
-                  <tr key={i} className="border-b border-gray-50 hover:bg-gray-50">
+                  <tr
+                    key={i}
+                    className={`border-b ${
+                      rowErrors[i]
+                        ? "border-red-100 bg-red-50 hover:bg-red-100"
+                        : "border-gray-50 hover:bg-gray-50"
+                    }`}
+                  >
                     <td className="px-2 py-1.5">
-                      <input
-                        className="w-28 border border-gray-200 rounded px-1.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-green-400"
-                        value={row.talhao_nome ?? ""}
-                        onChange={(e) => updateRow(i, "talhao_nome", e.target.value)}
-                      />
+                      <div className="flex items-center gap-1">
+                        <input
+                          className="w-28 border border-gray-200 rounded px-1.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-green-400"
+                          value={row.talhao_nome ?? ""}
+                          onChange={(e) => updateRow(i, "talhao_nome", e.target.value)}
+                        />
+                        {rowErrors[i] && (
+                          <div className="group relative">
+                            <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0" />
+                            <div className="absolute left-0 bottom-full mb-1 hidden group-hover:block bg-red-700 text-white text-xs rounded px-2 py-1 whitespace-nowrap z-10">
+                              {rowErrors[i]}
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </td>
                     <td className="px-2 py-1.5">
                       <input
@@ -498,13 +534,19 @@ export default function UploadsPage() {
           <div className="flex justify-end p-4 border-t border-gray-100">
             <button
               onClick={handleSave}
-              disabled={saving}
+              disabled={saving || Object.keys(rowErrors).length > 0}
               className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors"
+              title={Object.keys(rowErrors).length > 0 ? `${Object.keys(rowErrors).length} linha(s) com erro` : undefined}
             >
               {saving ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
                   Salvando...
+                </>
+              ) : Object.keys(rowErrors).length > 0 ? (
+                <>
+                  <AlertCircle className="w-4 h-4" />
+                  {Object.keys(rowErrors).length} erro(s)
                 </>
               ) : (
                 "Confirmar e salvar"
