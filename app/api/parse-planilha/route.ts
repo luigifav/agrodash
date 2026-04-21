@@ -310,30 +310,51 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Não foi possível ler o arquivo PDF." }, { status: 422 });
     }
 
-    if (!pdfText || pdfText.trim().length < 20) {
-      return NextResponse.json(
-        {
-          error:
-            "PDF não legível. O arquivo pode ser uma imagem escaneada sem texto. Tente converter para XLS ou XLSX antes de importar.",
-        },
-        { status: 422 }
-      );
-    }
-
     try {
-      const userMessage = `Aqui está o texto extraído do PDF:\n${pdfText.slice(0, 20000)}`;
-      const message = await anthropic.messages.create({
-        model: "claude-haiku-4-5-20251001",
-        max_tokens: 4096,
-        system: PDF_SYSTEM,
-        messages: [{ role: "user", content: userMessage }],
-      });
+      let message;
+
+      if (!pdfText || pdfText.trim().length < 20) {
+        // Fallback: processar PDF como documento visual
+        const base64Pdf = buffer.toString("base64");
+        message = await anthropic.messages.create({
+          model: "claude-sonnet-4-6",
+          max_tokens: 4096,
+          system: PDF_SYSTEM,
+          messages: [
+            {
+              role: "user",
+              content: [
+                {
+                  type: "document",
+                  source: {
+                    type: "base64",
+                    media_type: "application/pdf",
+                    data: base64Pdf,
+                  },
+                },
+              ],
+            },
+          ],
+        });
+      } else {
+        // Processamento normal com texto extraído
+        const userMessage = `Aqui está o texto extraído do PDF:\n${pdfText.slice(0, 20000)}`;
+        message = await anthropic.messages.create({
+          model: "claude-haiku-4-5-20251001",
+          max_tokens: 4096,
+          system: PDF_SYSTEM,
+          messages: [{ role: "user", content: userMessage }],
+        });
+      }
 
       const content = message.content[0];
       if (content.type !== "text") {
         return NextResponse.json({ error: "Resposta inesperada da IA" }, { status: 500 });
       }
 
+      const userMessage = !pdfText || pdfText.trim().length < 20
+        ? "Extrair registros do PDF"
+        : `Aqui está o texto extraído do PDF:\n${pdfText.slice(0, 20000)}`;
       const parsed = await parseAIResponse(anthropic, content.text, PDF_SYSTEM, userMessage);
       return NextResponse.json(parsed);
     } catch (err) {
