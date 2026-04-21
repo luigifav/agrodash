@@ -48,7 +48,8 @@ export default function UploadsPage() {
   const [rowErrors, setRowErrors] = useState<Record<number, string>>({});
 
   useEffect(() => {
-    (async () => await fetchUploads())();
+    fetchUploads();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function fetchUploads() {
@@ -230,6 +231,7 @@ export default function UploadsPage() {
           unidade_id: p.unidade_id!,
           ano: p.ano!,
           data_plantio: p.data_plantio!,
+          area_ha: p.area_ha ?? 0,
         }))
       );
       if (plantioError) throw new Error(`Erro ao salvar plantios: ${plantioError.message}`);
