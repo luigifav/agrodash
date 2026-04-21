@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { SAFRAS, CULTURAS, UNIDADES, AREA_UNIDADES, ALQ_TO_HA } from "@/lib/constants";
 import { Upload, Loader2, CheckCircle, XCircle, FileText, FileSpreadsheet, AlertCircle } from "lucide-react";
 
 type ParsedRow = {
@@ -27,12 +28,6 @@ type UploadRecord = {
   status: string;
   criado_em: string;
 };
-
-const SAFRAS = ["Verão", "Inverno", "Safrinha"];
-const CULTURAS = ["Soja", "Milho", "Sorgo", "Cevada", "Batata", "Trigo", "Feijão"];
-const UNIDADES = ["sc", "t"];
-const AREA_UNIDADES = ["ha", "alq"];
-const ALQ_TO_HA = 2.42;
 
 export default function UploadsPage() {
   const supabase = createClient();

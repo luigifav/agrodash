@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import * as XLSX from "xlsx";
 import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@/lib/supabase/server";
+import { SAFRAS, CULTURAS, UNIDADES, AREA_UNIDADES, ALQ_TO_HA } from "@/lib/constants";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -57,10 +58,10 @@ Formato exato:
     "longitude": "nome exato da coluna ou null"
   },
   "normalizations": {
-    "safra_nome": { "valor_exato_da_planilha": "Verão|Inverno|Safrinha" },
-    "cultura_nome": { "valor_exato_da_planilha": "Soja|Milho|Sorgo|Cevada|Batata|Trigo|Feijão" },
-    "unidade_sigla": { "valor_exato_da_planilha": "sc|t" },
-    "area_unidade": { "valor_exato_da_planilha": "alq|ha" }
+    "safra_nome": { "valor_exato_da_planilha": "${SAFRAS.join("|")}" },
+    "cultura_nome": { "valor_exato_da_planilha": "${CULTURAS.join("|")}" },
+    "unidade_sigla": { "valor_exato_da_planilha": "${UNIDADES.join("|")}" },
+    "area_unidade": { "valor_exato_da_planilha": "${AREA_UNIDADES.join("|")}" }
   },
   "ano_from_plantio": false,
   "talhao_from_concat": false,
@@ -81,8 +82,8 @@ const PDF_SYSTEM = `Você é um parser de relatórios agrícolas brasileiros em 
 Retorne APENAS um array JSON válido, sem nenhum texto adicional, sem markdown, sem explicações.
 
 Regras obrigatórias:
-- Para safra, normalize para: Verão, Inverno ou Safrinha
-- Para cultura, normalize para: Soja, Milho, Sorgo, Cevada, Batata, Trigo ou Feijão
+- Para safra, normalize para: ${SAFRAS.join(", ")}
+- Para cultura, normalize para: ${CULTURAS.join(", ")}
 - Para datas, use formato YYYY-MM-DD. Se o ano tiver apenas 2 dígitos (ex: 03/10/25), interprete como 2025
 - Se a área estiver em alqueires (coluna "Alq" ou similar), defina area_unidade como "alq" e retorne o valor bruto (sem converter). Se já estiver em hectares, defina area_unidade como "ha"
 - Se houver coordenadas em grau-minuto-segundo (ex: 23° 37' 51.65" S), converta para decimal negativo: -(graus + minutos/60 + segundos/3600). O resultado para S e W deve ser negativo
