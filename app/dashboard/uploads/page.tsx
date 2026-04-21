@@ -48,7 +48,7 @@ export default function UploadsPage() {
   const [rowErrors, setRowErrors] = useState<Record<number, string>>({});
 
   useEffect(() => {
-    fetchUploads();
+    (async () => await fetchUploads())();
   }, []);
 
   async function fetchUploads() {
@@ -221,7 +221,17 @@ export default function UploadsPage() {
         );
       }
 
-      const { error: plantioError } = await supabase.from("plantios").insert(plantiosPayload);
+      const { error: plantioError } = await supabase.from("plantios").insert(
+        plantiosPayload.map((p) => ({
+          ...p,
+          talhao_id: p.talhao_id!,
+          cultura_id: p.cultura_id!,
+          safra_id: p.safra_id!,
+          unidade_id: p.unidade_id!,
+          ano: p.ano!,
+          data_plantio: p.data_plantio!,
+        }))
+      );
       if (plantioError) throw new Error(`Erro ao salvar plantios: ${plantioError.message}`);
 
       await supabase.from("uploads").insert({
