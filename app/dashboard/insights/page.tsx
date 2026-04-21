@@ -381,7 +381,7 @@ export default function InsightsPage() {
 
       {!result && !loading && !error && (
         <div className="bg-gray-50 rounded-lg border border-gray-200 p-12 text-center">
-          <p className="text-gray-600">Preencha os filtros e clique em "Gerar Análise" para ver os insights</p>
+          <p className="text-gray-600">Preencha os filtros e clique em &quot;Gerar Análise&quot; para ver os insights</p>
         </div>
       )}
     </div>
