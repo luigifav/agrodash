@@ -1,0 +1,247 @@
+export type Json =
+  | string
+  | number
+  | boolean
+  | null
+  | { [key: string]: Json | undefined }
+  | Json[];
+
+export type Database = {
+  public: {
+    Tables: {
+      unidades: {
+        Row: {
+          id: string;
+          nome: string;
+          sigla: string;
+        };
+        Insert: {
+          id?: string;
+          nome: string;
+          sigla: string;
+        };
+        Update: {
+          id?: string;
+          nome?: string;
+          sigla?: string;
+        };
+        Relationships: [];
+      };
+      safras: {
+        Row: {
+          id: string;
+          nome: string;
+        };
+        Insert: {
+          id?: string;
+          nome: string;
+        };
+        Update: {
+          id?: string;
+          nome?: string;
+        };
+        Relationships: [];
+      };
+      culturas: {
+        Row: {
+          id: string;
+          nome: string;
+          unidade_padrao_id: string | null;
+        };
+        Insert: {
+          id?: string;
+          nome: string;
+          unidade_padrao_id?: string | null;
+        };
+        Update: {
+          id?: string;
+          nome?: string;
+          unidade_padrao_id?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "culturas_unidade_padrao_id_fkey";
+            columns: ["unidade_padrao_id"];
+            isOneToOne: false;
+            referencedRelation: "unidades";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      talhoes: {
+        Row: {
+          id: string;
+          nome: string;
+          geojson: Json | null;
+          ativo: boolean;
+          criado_em: string;
+        };
+        Insert: {
+          id?: string;
+          nome: string;
+          geojson?: Json | null;
+          ativo?: boolean;
+          criado_em?: string;
+        };
+        Update: {
+          id?: string;
+          nome?: string;
+          geojson?: Json | null;
+          ativo?: boolean;
+          criado_em?: string;
+        };
+        Relationships: [];
+      };
+      plantios: {
+        Row: {
+          id: string;
+          talhao_id: string;
+          cultura_id: string;
+          safra_id: string;
+          ano: number;
+          data_plantio: string;
+          data_colheita: string | null;
+          area_ha: number;
+          volume_colhido: number | null;
+          unidade_id: string;
+          produtividade_sc_ha: number | null;
+          latitude: number | null;
+          longitude: number | null;
+          area_unidade: string;
+          criado_em: string;
+          criado_por: string | null;
+          agronomo: string | null;
+        };
+        Insert: {
+          id?: string;
+          talhao_id: string;
+          cultura_id: string;
+          safra_id: string;
+          ano: number;
+          data_plantio: string;
+          data_colheita?: string | null;
+          area_ha: number;
+          volume_colhido?: number | null;
+          unidade_id: string;
+          produtividade_sc_ha?: number | null;
+          latitude?: number | null;
+          longitude?: number | null;
+          area_unidade?: string;
+          criado_em?: string;
+          criado_por?: string | null;
+          agronomo?: string | null;
+        };
+        Update: {
+          id?: string;
+          talhao_id?: string;
+          cultura_id?: string;
+          safra_id?: string;
+          ano?: number;
+          data_plantio?: string;
+          data_colheita?: string | null;
+          area_ha?: number;
+          volume_colhido?: number | null;
+          unidade_id?: string;
+          produtividade_sc_ha?: number | null;
+          latitude?: number | null;
+          longitude?: number | null;
+          area_unidade?: string;
+          criado_em?: string;
+          criado_por?: string | null;
+          agronomo?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "plantios_talhao_id_fkey";
+            columns: ["talhao_id"];
+            isOneToOne: false;
+            referencedRelation: "talhoes";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "plantios_cultura_id_fkey";
+            columns: ["cultura_id"];
+            isOneToOne: false;
+            referencedRelation: "culturas";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "plantios_safra_id_fkey";
+            columns: ["safra_id"];
+            isOneToOne: false;
+            referencedRelation: "safras";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "plantios_unidade_id_fkey";
+            columns: ["unidade_id"];
+            isOneToOne: false;
+            referencedRelation: "unidades";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      uploads: {
+        Row: {
+          id: string;
+          nome_arquivo: string;
+          status: string;
+          criado_em: string;
+          criado_por: string | null;
+        };
+        Insert: {
+          id?: string;
+          nome_arquivo: string;
+          status: string;
+          criado_em?: string;
+          criado_por?: string | null;
+        };
+        Update: {
+          id?: string;
+          nome_arquivo?: string;
+          status?: string;
+          criado_em?: string;
+          criado_por?: string | null;
+        };
+        Relationships: [];
+      };
+    };
+    Views: Record<string, never>;
+    Functions: Record<string, never>;
+    Enums: Record<string, never>;
+    CompositeTypes: Record<string, never>;
+  };
+};
+
+export type Tables<T extends keyof Database["public"]["Tables"]> =
+  Database["public"]["Tables"][T]["Row"];
+
+/** Resultado do SELECT de plantios com joins, usado no dashboard. */
+export type PlantioComResumo = Pick<
+  Tables<"plantios">,
+  "id" | "ano" | "area_ha" | "volume_colhido" | "produtividade_sc_ha"
+> & {
+  talhoes: Pick<Tables<"talhoes">, "nome"> | null;
+  culturas: Pick<Tables<"culturas">, "nome"> | null;
+  safras: Pick<Tables<"safras">, "nome"> | null;
+};
+
+/** Resultado do SELECT de plantios com joins, usado na página /plantios. */
+export type PlantioComDetalhes = Pick<
+  Tables<"plantios">,
+  | "id"
+  | "ano"
+  | "data_plantio"
+  | "data_colheita"
+  | "area_ha"
+  | "volume_colhido"
+  | "produtividade_sc_ha"
+  | "agronomo"
+  | "latitude"
+  | "longitude"
+> & {
+  talhoes: Pick<Tables<"talhoes">, "nome"> | null;
+  culturas: Pick<Tables<"culturas">, "nome"> | null;
+  safras: Pick<Tables<"safras">, "nome"> | null;
+  unidades: Pick<Tables<"unidades">, "sigla"> | null;
+};
