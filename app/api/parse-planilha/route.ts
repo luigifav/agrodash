@@ -222,6 +222,35 @@ function stripFences(text: string): string {
   return text.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/, "");
 }
 
+async function parseAIResponse(
+  client: Anthropic,
+  firstAttemptText: string,
+  systemPrompt: string,
+  userMessage: string
+): Promise<unknown> {
+  try {
+    const cleaned = stripFences(firstAttemptText);
+    return JSON.parse(cleaned);
+  } catch {
+    // Retry com instrução explícita sobre JSON válido
+    const enhancedSystem = systemPrompt + "\n\nRetorne APENAS JSON válido, sem nenhum texto adicional.";
+    const retryMessage = await client.messages.create({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 4096,
+      system: enhancedSystem,
+      messages: [{ role: "user", content: userMessage }],
+    });
+
+    const retryContent = retryMessage.content[0];
+    if (retryContent.type !== "text") {
+      throw new Error("Resposta inesperada da IA no retry");
+    }
+
+    const cleaned = stripFences(retryContent.text);
+    return JSON.parse(cleaned);
+  }
+}
+
 // ── Route ──────────────────────────────────────────────────────────────────────
 
 export async function POST(request: NextRequest) {
@@ -291,11 +320,12 @@ export async function POST(request: NextRequest) {
     }
 
     try {
+      const userMessage = `Aqui está o texto extraído do PDF:\n${pdfText.slice(0, 20000)}`;
       const message = await anthropic.messages.create({
         model: "claude-haiku-4-5-20251001",
         max_tokens: 4096,
         system: PDF_SYSTEM,
-        messages: [{ role: "user", content: `Aqui está o texto extraído do PDF:\n${pdfText.slice(0, 20000)}` }],
+        messages: [{ role: "user", content: userMessage }],
       });
 
       const content = message.content[0];
@@ -303,7 +333,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Resposta inesperada da IA" }, { status: 500 });
       }
 
-      const parsed = JSON.parse(stripFences(content.text));
+      const parsed = await parseAIResponse(anthropic, content.text, PDF_SYSTEM, userMessage);
       return NextResponse.json(parsed);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Erro desconhecido";
@@ -341,6 +371,7 @@ export async function POST(request: NextRequest) {
 
   let mapping: ColumnMapping;
   try {
+    const userMessage = `Cabeçalhos: ${JSON.stringify(headers)}\n\nLinhas de amostra:\n${JSON.stringify(sample, null, 2)}`;
     const message = await anthropic.messages.create({
       model: "claude-haiku-4-5-20251001",
       max_tokens: 1024,
@@ -348,7 +379,7 @@ export async function POST(request: NextRequest) {
       messages: [
         {
           role: "user",
-          content: `Cabeçalhos: ${JSON.stringify(headers)}\n\nLinhas de amostra:\n${JSON.stringify(sample, null, 2)}`,
+          content: userMessage,
         },
       ],
     });
@@ -358,7 +389,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Resposta inesperada da IA" }, { status: 500 });
     }
 
-    mapping = JSON.parse(stripFences(content.text)) as ColumnMapping;
+    const parsed = await parseAIResponse(anthropic, content.text, XLSX_MAPPING_SYSTEM, userMessage);
+    mapping = parsed as ColumnMapping;
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Erro desconhecido";
     return NextResponse.json({ error: `Falha ao processar com IA: ${msg}` }, { status: 500 });
