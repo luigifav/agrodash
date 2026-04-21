@@ -101,6 +101,10 @@ export default function UploadsPage() {
     setSaving(true);
     setFeedback(null);
 
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
     try {
       const [
         { data: culturas },
@@ -156,10 +160,6 @@ export default function UploadsPage() {
         if (geojsonUpdates.length > 0) await Promise.all(geojsonUpdates);
       }
 
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
       const plantiosPayload = rows.map((r) => ({
         talhao_id: talhaoMap.get(r.talhao_nome) ?? null,
         cultura_id: culturaMap.get(r.cultura_nome) ?? null,
@@ -204,9 +204,6 @@ export default function UploadsPage() {
       const msg = err instanceof Error ? err.message : "Erro desconhecido";
       setFeedback({ type: "error", msg });
 
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
       await supabase.from("uploads").insert({
         nome_arquivo: fileName ?? "desconhecido",
         status: "erro",
