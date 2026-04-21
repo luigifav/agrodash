@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { SAFRAS, CULTURAS, UNIDADES, AREA_UNIDADES, ALQ_TO_HA } from "@/lib/constants";
 import { Upload, Loader2, CheckCircle, XCircle, FileText, FileSpreadsheet, AlertCircle } from "lucide-react";
@@ -41,17 +41,17 @@ export default function UploadsPage() {
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; msg: string } | null>(null);
   const [rowErrors, setRowErrors] = useState<Record<number, string>>({});
 
-  useEffect(() => {
-    fetchUploads();
-  }, []);
-
-  async function fetchUploads() {
+  const fetchUploads = useCallback(async () => {
     const { data } = await supabase
       .from("uploads")
       .select("id, nome_arquivo, status, criado_em")
       .order("criado_em", { ascending: false });
     setUploads(data ?? []);
-  }
+  }, [supabase]);
+
+  useEffect(() => {
+    fetchUploads();
+  }, [fetchUploads]);
 
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
