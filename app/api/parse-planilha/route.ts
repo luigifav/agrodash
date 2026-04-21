@@ -319,7 +319,7 @@ async function parseAIJson<T>(
   const attempt = async (extraInstruction?: string) => {
     const p = {
       ...params,
-      stream: false,
+      stream: false as const,
       messages: extraInstruction
         ? [
             ...params.messages,
@@ -327,7 +327,7 @@ async function parseAIJson<T>(
           ]
         : params.messages,
     };
-    const msg = await anthropic.messages.create(p);
+    const msg = (await anthropic.messages.create(p)) as Anthropic.Message;
     const content = msg.content[0];
     if (content.type !== "text") throw new Error("Resposta inesperada da IA");
     return JSON.parse(stripFences(content.text)) as T;
