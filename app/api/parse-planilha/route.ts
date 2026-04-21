@@ -243,6 +243,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Nenhum arquivo enviado" }, { status: 400 });
   }
 
+  const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
+  if (file.size > MAX_FILE_SIZE) {
+    return NextResponse.json(
+      { error: "O arquivo excede o tamanho máximo permitido de 10 MB." },
+      { status: 400 }
+    );
+  }
+
   const name = file.name.toLowerCase();
   const isPdf = name.endsWith(".pdf");
   const isXlsx = name.endsWith(".xls") || name.endsWith(".xlsx");
@@ -308,12 +316,17 @@ export async function POST(request: NextRequest) {
     const sheetName = workbook.SheetNames[0];
     const worksheet = workbook.Sheets[sheetName];
     rows = XLSX.utils.sheet_to_json(worksheet, { defval: null }) as Record<string, unknown>[];
-    rows = rows.slice(0, 500);
   } catch {
     return NextResponse.json(
       { error: "Não foi possível ler o arquivo. Verifique se é um .xls/.xlsx válido." },
       { status: 422 }
     );
+  }
+
+  const totalRows = rows.length;
+  const truncated = totalRows > 500;
+  if (truncated) {
+    rows = rows.slice(0, 500);
   }
 
   if (rows.length === 0) {
@@ -350,5 +363,5 @@ export async function POST(request: NextRequest) {
   }
 
   const result = applyMapping(rows, mapping);
-  return NextResponse.json(result);
+  return NextResponse.json({ data: result, truncated, total_rows: totalRows });
 }
