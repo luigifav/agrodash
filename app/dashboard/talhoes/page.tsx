@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { MapPin } from "lucide-react";
+import Link from "next/link";
 import { TalhoesMap } from "@/components/talhoes-map";
 import type { TalhaoMapData } from "@/components/talhoes-map";
 
@@ -97,7 +98,12 @@ export default async function TalhoesPage() {
                     className="border-b border-gray-50 hover:bg-gray-50"
                   >
                     <td className="px-5 py-3 font-medium text-gray-900">
-                      {t.nome}
+                      <Link
+                        href={`/dashboard/talhoes/${t.id}`}
+                        className="text-blue-600 hover:text-blue-800 hover:underline"
+                      >
+                        {t.nome}
+                      </Link>
                     </td>
                     <td className="px-5 py-3">
                       <span
