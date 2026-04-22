@@ -117,8 +117,10 @@ REGRAS CRÍTICAS:
    - Se não houver coluna de ano mas houver data_plantio, defina ano_from_plantio: true.
    - Se não houver nem data_plantio, tente inferir o ano pelo contexto e coloque em default_values.ano.
 
-8. Campos não encontrados e não inferíveis: use null.
-9. normalizations deve cobrir TODOS os valores únicos encontrados nas amostras.`;
+8. DATAS: Colunas com números inteiros grandes (entre 40000 e 55000) são datas seriais do Excel. Mapeie normalmente para data_plantio ou data_colheita — o sistema converte automaticamente.
+
+9. Campos não encontrados e não inferíveis: use null.
+10. normalizations deve cobrir TODOS os valores únicos encontrados nas amostras.`;
 
 const PDF_SYSTEM = `Você é um parser de relatórios agrícolas brasileiros em PDF. O texto abaixo foi extraído de um PDF que pode ser uma tabela, relatório ou planilha exportada. Analise o conteúdo e extraia todos os registros de plantio que encontrar.
 
@@ -436,7 +438,7 @@ export async function POST(request: NextRequest) {
   // ── Caminho XLSX ──────────────────────────────────────────────────────────────
   let rows: Record<string, unknown>[];
   try {
-    const workbook = XLSX.read(buffer, { type: "buffer", cellDates: true });
+    const workbook = XLSX.read(buffer, { type: "buffer" });
     const sheetName = workbook.SheetNames[0];
     const worksheet = workbook.Sheets[sheetName];
     rows = XLSX.utils.sheet_to_json(worksheet, { defval: null }) as Record<string, unknown>[];
