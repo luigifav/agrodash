@@ -70,6 +70,10 @@ CREATE TABLE IF NOT EXISTS uploads (
 -- does not add columns to a pre-existing table).
 ALTER TABLE plantios ADD COLUMN IF NOT EXISTS area_unidade TEXT NOT NULL DEFAULT 'ha';
 ALTER TABLE plantios ADD COLUMN IF NOT EXISTS agronomo TEXT;
+ALTER TABLE plantios ADD COLUMN IF NOT EXISTS latitude  DECIMAL(10, 7);
+ALTER TABLE plantios ADD COLUMN IF NOT EXISTS longitude DECIMAL(10, 7);
+ALTER TABLE talhoes  ADD COLUMN IF NOT EXISTS geojson   JSONB;
+ALTER TABLE talhoes  ADD COLUMN IF NOT EXISTS ativo     BOOLEAN NOT NULL DEFAULT TRUE;
 
 -- ============================================================
 -- SEED DATA - UNIDADES
@@ -238,3 +242,9 @@ AS $$
 $$;
 
 GRANT EXECUTE ON FUNCTION resumo_producao_por_ano_cultura() TO authenticated;
+
+-- ============================================================
+-- Force PostgREST to reload its schema cache so newly added
+-- columns (e.g. latitude/longitude) become visible immediately.
+-- ============================================================
+NOTIFY pgrst, 'reload schema';
