@@ -146,6 +146,56 @@ export default function UploadsPage() {
       const unidadeMap = new Map((unidades ?? []).map((u) => [u.sigla, u.id]));
       const talhaoMap = new Map((talhoes ?? []).map((t) => [t.nome, t.id]));
 
+      // Auto-cria safras/culturas/unidades ausentes para que valores
+      // ligeiramente fora do conjunto pré-cadastrado não bloqueiem o upload.
+      const newSafras = Array.from(
+        new Set(
+          rows
+            .map((r) => r.safra_nome?.trim())
+            .filter((n): n is string => !!n && !safraMap.has(n))
+        )
+      );
+      if (newSafras.length > 0) {
+        const { data: inserted, error } = await supabase
+          .from("safras")
+          .insert(newSafras.map((nome) => ({ nome })))
+          .select("id, nome");
+        if (error) throw new Error(`Erro ao criar safras: ${error.message}`);
+        (inserted ?? []).forEach((s: { id: string; nome: string }) => safraMap.set(s.nome, s.id));
+      }
+
+      const newCulturas = Array.from(
+        new Set(
+          rows
+            .map((r) => r.cultura_nome?.trim())
+            .filter((n): n is string => !!n && !culturaMap.has(n))
+        )
+      );
+      if (newCulturas.length > 0) {
+        const { data: inserted, error } = await supabase
+          .from("culturas")
+          .insert(newCulturas.map((nome) => ({ nome })))
+          .select("id, nome");
+        if (error) throw new Error(`Erro ao criar culturas: ${error.message}`);
+        (inserted ?? []).forEach((c: { id: string; nome: string }) => culturaMap.set(c.nome, c.id));
+      }
+
+      const newUnidades = Array.from(
+        new Set(
+          rows
+            .map((r) => r.unidade_sigla?.trim())
+            .filter((s): s is string => !!s && !unidadeMap.has(s))
+        )
+      );
+      if (newUnidades.length > 0) {
+        const { data: inserted, error } = await supabase
+          .from("unidades")
+          .insert(newUnidades.map((sigla) => ({ nome: sigla, sigla })))
+          .select("id, sigla");
+        if (error) throw new Error(`Erro ao criar unidades: ${error.message}`);
+        (inserted ?? []).forEach((u: { id: string; sigla: string }) => unidadeMap.set(u.sigla, u.id));
+      }
+
       // Cria talhões que ainda não existem
       const seen = new Set<string>();
       const newTalhaoNames: string[] = [];
@@ -185,21 +235,26 @@ export default function UploadsPage() {
         if (geojsonUpdates.length > 0) await Promise.all(geojsonUpdates);
       }
 
-      const plantiosPayload = rows.map((r) => ({
-  talhao_id: r.talhao_nome ? (talhaoMap.get(r.talhao_nome.trim()) ?? null) : null,
-  cultura_id: r.cultura_nome ? (culturaMap.get(r.cultura_nome) ?? null) : null,
-  safra_id: r.safra_nome ? (safraMap.get(r.safra_nome) ?? null) : null,
-  ano: r.ano,
-  data_plantio: r.data_plantio,
-  data_colheita: r.data_colheita ?? null,
-  area_ha: r.area_unidade === "alq" ? (r.area_ha ?? 0) * ALQ_TO_HA : r.area_ha,
-  volume_colhido: r.volume_colhido ?? null,
-  unidade_id: r.unidade_sigla ? (unidadeMap.get(r.unidade_sigla) ?? null) : null,
-  produtividade_sc_ha: r.produtividade_sc_ha ?? null,
-  latitude: r.latitude ?? null,
-  longitude: r.longitude ?? null,
-  criado_por: user?.id ?? null,
-      }));
+      const plantiosPayload = rows.map((r) => {
+        const base: Record<string, unknown> = {
+          talhao_id: r.talhao_nome ? (talhaoMap.get(r.talhao_nome.trim()) ?? null) : null,
+          cultura_id: r.cultura_nome ? (culturaMap.get(r.cultura_nome.trim()) ?? null) : null,
+          safra_id: r.safra_nome ? (safraMap.get(r.safra_nome.trim()) ?? null) : null,
+          ano: r.ano,
+          data_plantio: r.data_plantio,
+          data_colheita: r.data_colheita ?? null,
+          area_ha: r.area_unidade === "alq" ? (r.area_ha ?? 0) * ALQ_TO_HA : r.area_ha,
+          volume_colhido: r.volume_colhido ?? null,
+          unidade_id: r.unidade_sigla ? (unidadeMap.get(r.unidade_sigla.trim()) ?? null) : null,
+          produtividade_sc_ha: r.produtividade_sc_ha ?? null,
+          criado_por: user?.id ?? null,
+        };
+        // Só inclui lat/lon quando há valor — protege contra schemas legados
+        // sem essas colunas (a coordenada já é persistida no geojson do talhão).
+        if (r.latitude != null) base.latitude = r.latitude;
+        if (r.longitude != null) base.longitude = r.longitude;
+        return base;
+      });
 
       // Valida linha a linha e destaca erros
       const newRowErrors: Record<number, string> = {};
@@ -221,16 +276,8 @@ export default function UploadsPage() {
       }
 
       const { error: plantioError } = await supabase.from("plantios").insert(
-        plantiosPayload.map((p) => ({
-          ...p,
-          talhao_id: p.talhao_id!,
-          cultura_id: p.cultura_id!,
-          safra_id: p.safra_id!,
-          unidade_id: p.unidade_id!,
-          ano: p.ano!,
-          data_plantio: p.data_plantio!,
-          area_ha: p.area_ha ?? 0,
-        }))
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        plantiosPayload.map((p) => ({ ...p, area_ha: p.area_ha ?? 0 })) as any
       );
       if (plantioError) throw new Error(`Erro ao salvar plantios: ${plantioError.message}`);
 
