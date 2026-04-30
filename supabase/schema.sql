@@ -66,6 +66,11 @@ CREATE TABLE IF NOT EXISTS uploads (
   criado_por      UUID        REFERENCES auth.users(id)
 );
 
+-- Idempotent column adds for existing deployments (CREATE TABLE IF NOT EXISTS
+-- does not add columns to a pre-existing table).
+ALTER TABLE plantios ADD COLUMN IF NOT EXISTS area_unidade TEXT NOT NULL DEFAULT 'ha';
+ALTER TABLE plantios ADD COLUMN IF NOT EXISTS agronomo TEXT;
+
 -- ============================================================
 -- SEED DATA - UNIDADES
 -- ============================================================
