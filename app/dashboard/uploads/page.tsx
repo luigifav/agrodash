@@ -193,7 +193,6 @@ export default function UploadsPage() {
   data_plantio: r.data_plantio,
   data_colheita: r.data_colheita ?? null,
   area_ha: r.area_unidade === "alq" ? (r.area_ha ?? 0) * ALQ_TO_HA : r.area_ha,
-  area_unidade: r.area_unidade,
   volume_colhido: r.volume_colhido ?? null,
   unidade_id: r.unidade_sigla ? (unidadeMap.get(r.unidade_sigla) ?? null) : null,
   produtividade_sc_ha: r.produtividade_sc_ha ?? null,
