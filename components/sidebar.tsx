@@ -10,6 +10,7 @@ import {
   Upload,
   LogOut,
   Leaf,
+  CalendarDays,
 } from "lucide-react";
 
 interface SidebarProps {
@@ -20,6 +21,11 @@ const navLinks = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/dashboard/talhoes", label: "Talhões", icon: MapPin },
   { href: "/dashboard/plantios", label: "Plantios", icon: Sprout },
+  {
+    href: "/dashboard/janela-plantio",
+    label: "Janela de Plantio",
+    icon: CalendarDays,
+  },
   { href: "/dashboard/uploads", label: "Uploads", icon: Upload },
 ];
 

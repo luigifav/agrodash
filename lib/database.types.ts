@@ -255,3 +255,30 @@ export type PlantioComDetalhes = Pick<
   safras: Pick<Tables<"safras">, "nome"> | null;
   unidades: Pick<Tables<"unidades">, "sigla"> | null;
 };
+
+/** Plantio enriquecido usado nos KPIs e gráficos do dashboard. */
+export type PlantioEnriquecido = {
+  id: string;
+  ano: number;
+  data_plantio: string | null;
+  data_colheita: string | null;
+  area_ha: number;
+  volume_colhido: number | null;
+  produtividade_sc_ha: number | null;
+  talhao_id: string | null;
+  talhao: string;
+  cultura: string;
+  safra: string;
+};
+
+/** Dado agregado por (cultura, talhão, quinzena) para a página Janela de Plantio. */
+export type JanelaData = {
+  cultura: string;
+  talhao: string;
+  periodo: string;
+  mes: number;
+  quinzena: 1 | 2;
+  produtividade_media: number;
+  total_plantios: number;
+  area_media: number;
+};
