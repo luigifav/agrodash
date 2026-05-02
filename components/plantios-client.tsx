@@ -51,9 +51,12 @@ export function PlantiosClient({ plantios, anos, safras, culturas, talhoes }: Pr
     [plantios, filterAno, filterSafra, filterCultura, filterTalhao]
   )
 
+  const computeVolume = (p: PlantioRow) =>
+    p.produtividade_sc_ha != null ? p.area_ha * p.produtividade_sc_ha : null
+
   const totals = useMemo(() => {
     const totalArea = filtered.reduce((s, p) => s + p.area_ha, 0)
-    const totalVolume = filtered.reduce((s, p) => s + (p.volume_colhido ?? 0), 0)
+    const totalVolume = filtered.reduce((s, p) => s + (computeVolume(p) ?? 0), 0)
     const prodValues = filtered.flatMap((p) =>
       p.produtividade_sc_ha != null ? [p.produtividade_sc_ha] : []
     )
@@ -198,9 +201,12 @@ export function PlantiosClient({ plantios, anos, safras, culturas, talhoes }: Pr
                       {p.area_ha.toFixed(1)}
                     </td>
                     <td className="px-5 py-3 text-right text-gray-600">
-                      {p.volume_colhido != null
-                        ? `${Number(p.volume_colhido).toFixed(1)} ${p.unidade}`
-                        : '—'}
+                      {(() => {
+                        const v = computeVolume(p)
+                        return v != null
+                          ? `${v.toFixed(1)} ${p.unidade}`
+                          : '—'
+                      })()}
                     </td>
                     <td className="px-5 py-3 text-right text-gray-600">
                       {p.produtividade_sc_ha != null
