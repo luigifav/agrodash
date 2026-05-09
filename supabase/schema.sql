@@ -35,7 +35,8 @@ CREATE TABLE IF NOT EXISTS talhoes (
   nome        TEXT        NOT NULL,
   geojson     JSONB,
   ativo       BOOLEAN     NOT NULL DEFAULT TRUE,
-  criado_em   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  criado_em   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  criado_por  UUID        REFERENCES auth.users(id) DEFAULT auth.uid()
 );
 
 CREATE TABLE IF NOT EXISTS plantios (
@@ -72,8 +73,9 @@ ALTER TABLE plantios ADD COLUMN IF NOT EXISTS area_unidade TEXT NOT NULL DEFAULT
 ALTER TABLE plantios ADD COLUMN IF NOT EXISTS agronomo TEXT;
 ALTER TABLE plantios ADD COLUMN IF NOT EXISTS latitude  DECIMAL(10, 7);
 ALTER TABLE plantios ADD COLUMN IF NOT EXISTS longitude DECIMAL(10, 7);
-ALTER TABLE talhoes  ADD COLUMN IF NOT EXISTS geojson   JSONB;
-ALTER TABLE talhoes  ADD COLUMN IF NOT EXISTS ativo     BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE talhoes  ADD COLUMN IF NOT EXISTS geojson    JSONB;
+ALTER TABLE talhoes  ADD COLUMN IF NOT EXISTS ativo      BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE talhoes  ADD COLUMN IF NOT EXISTS criado_por UUID REFERENCES auth.users(id) DEFAULT auth.uid();
 
 -- ============================================================
 -- SEED DATA - UNIDADES
@@ -138,80 +140,101 @@ ALTER TABLE plantios  ENABLE ROW LEVEL SECURITY;
 ALTER TABLE uploads   ENABLE ROW LEVEL SECURITY;
 
 -- ============================================================
--- RLS POLICIES - READ (all authenticated users)
+-- RLS POLICIES
+-- SELECT:           qualquer usuário autenticado
+-- INSERT:           qualquer usuário autenticado
+-- UPDATE / DELETE:  apenas o próprio criador (criado_por = auth.uid())
+--                   tabelas de referência (unidades, safras, culturas)
+--                   liberam UPDATE / DELETE para qualquer autenticado.
 -- ============================================================
 
-CREATE POLICY "unidades_select"  ON unidades  FOR SELECT TO authenticated USING (true);
-CREATE POLICY "safras_select"    ON safras    FOR SELECT TO authenticated USING (true);
-CREATE POLICY "culturas_select"  ON culturas  FOR SELECT TO authenticated USING (true);
-CREATE POLICY "talhoes_select"   ON talhoes   FOR SELECT TO authenticated USING (true);
-CREATE POLICY "plantios_select"  ON plantios  FOR SELECT TO authenticated USING (true);
-CREATE POLICY "uploads_select"   ON uploads   FOR SELECT TO authenticated USING (true);
+-- Drop legacy policies (idempotent reapply)
+DROP POLICY IF EXISTS "unidades_select" ON unidades;
+DROP POLICY IF EXISTS "unidades_insert" ON unidades;
+DROP POLICY IF EXISTS "unidades_update" ON unidades;
+DROP POLICY IF EXISTS "unidades_delete" ON unidades;
+DROP POLICY IF EXISTS "safras_select"   ON safras;
+DROP POLICY IF EXISTS "safras_insert"   ON safras;
+DROP POLICY IF EXISTS "safras_update"   ON safras;
+DROP POLICY IF EXISTS "safras_delete"   ON safras;
+DROP POLICY IF EXISTS "culturas_select" ON culturas;
+DROP POLICY IF EXISTS "culturas_insert" ON culturas;
+DROP POLICY IF EXISTS "culturas_update" ON culturas;
+DROP POLICY IF EXISTS "culturas_delete" ON culturas;
+DROP POLICY IF EXISTS "talhoes_select"  ON talhoes;
+DROP POLICY IF EXISTS "talhoes_insert"  ON talhoes;
+DROP POLICY IF EXISTS "talhoes_update"  ON talhoes;
+DROP POLICY IF EXISTS "talhoes_delete"  ON talhoes;
+DROP POLICY IF EXISTS "plantios_select" ON plantios;
+DROP POLICY IF EXISTS "plantios_insert" ON plantios;
+DROP POLICY IF EXISTS "plantios_update" ON plantios;
+DROP POLICY IF EXISTS "plantios_delete" ON plantios;
+DROP POLICY IF EXISTS "uploads_select"  ON uploads;
+DROP POLICY IF EXISTS "uploads_insert"  ON uploads;
+DROP POLICY IF EXISTS "uploads_update"  ON uploads;
+DROP POLICY IF EXISTS "uploads_delete"  ON uploads;
 
--- ============================================================
--- RLS POLICIES - WRITE (admin only)
--- Admin role is stored in auth.users app_metadata: { "role": "admin" }
--- ============================================================
+-- SELECT (todos autenticados)
+CREATE POLICY "unidades_select" ON unidades FOR SELECT TO authenticated USING (true);
+CREATE POLICY "safras_select"   ON safras   FOR SELECT TO authenticated USING (true);
+CREATE POLICY "culturas_select" ON culturas FOR SELECT TO authenticated USING (true);
+CREATE POLICY "talhoes_select"  ON talhoes  FOR SELECT TO authenticated USING (true);
+CREATE POLICY "plantios_select" ON plantios FOR SELECT TO authenticated USING (true);
+CREATE POLICY "uploads_select"  ON uploads  FOR SELECT TO authenticated USING (true);
 
--- unidades
+-- unidades (tabela de referência)
 CREATE POLICY "unidades_insert" ON unidades FOR INSERT TO authenticated
-  WITH CHECK ((auth.jwt() -> 'app_metadata' ->> 'role') = 'admin');
-
+  WITH CHECK (auth.uid() IS NOT NULL);
 CREATE POLICY "unidades_update" ON unidades FOR UPDATE TO authenticated
-  USING ((auth.jwt() -> 'app_metadata' ->> 'role') = 'admin');
-
+  USING (auth.uid() IS NOT NULL)
+  WITH CHECK (auth.uid() IS NOT NULL);
 CREATE POLICY "unidades_delete" ON unidades FOR DELETE TO authenticated
-  USING ((auth.jwt() -> 'app_metadata' ->> 'role') = 'admin');
+  USING (auth.uid() IS NOT NULL);
 
--- safras
+-- safras (tabela de referência)
 CREATE POLICY "safras_insert" ON safras FOR INSERT TO authenticated
-  WITH CHECK ((auth.jwt() -> 'app_metadata' ->> 'role') = 'admin');
-
+  WITH CHECK (auth.uid() IS NOT NULL);
 CREATE POLICY "safras_update" ON safras FOR UPDATE TO authenticated
-  USING ((auth.jwt() -> 'app_metadata' ->> 'role') = 'admin');
-
+  USING (auth.uid() IS NOT NULL)
+  WITH CHECK (auth.uid() IS NOT NULL);
 CREATE POLICY "safras_delete" ON safras FOR DELETE TO authenticated
-  USING ((auth.jwt() -> 'app_metadata' ->> 'role') = 'admin');
+  USING (auth.uid() IS NOT NULL);
 
--- culturas
+-- culturas (tabela de referência)
 CREATE POLICY "culturas_insert" ON culturas FOR INSERT TO authenticated
-  WITH CHECK ((auth.jwt() -> 'app_metadata' ->> 'role') = 'admin');
-
+  WITH CHECK (auth.uid() IS NOT NULL);
 CREATE POLICY "culturas_update" ON culturas FOR UPDATE TO authenticated
-  USING ((auth.jwt() -> 'app_metadata' ->> 'role') = 'admin');
-
+  USING (auth.uid() IS NOT NULL)
+  WITH CHECK (auth.uid() IS NOT NULL);
 CREATE POLICY "culturas_delete" ON culturas FOR DELETE TO authenticated
-  USING ((auth.jwt() -> 'app_metadata' ->> 'role') = 'admin');
+  USING (auth.uid() IS NOT NULL);
 
--- talhoes
+-- talhoes (criado_por preenchido automaticamente via DEFAULT auth.uid())
 CREATE POLICY "talhoes_insert" ON talhoes FOR INSERT TO authenticated
-  WITH CHECK ((auth.jwt() -> 'app_metadata' ->> 'role') = 'admin');
-
+  WITH CHECK (auth.uid() IS NOT NULL);
 CREATE POLICY "talhoes_update" ON talhoes FOR UPDATE TO authenticated
-  USING ((auth.jwt() -> 'app_metadata' ->> 'role') = 'admin');
-
+  USING (criado_por = auth.uid())
+  WITH CHECK (criado_por = auth.uid());
 CREATE POLICY "talhoes_delete" ON talhoes FOR DELETE TO authenticated
-  USING ((auth.jwt() -> 'app_metadata' ->> 'role') = 'admin');
+  USING (criado_por = auth.uid());
 
 -- plantios
 CREATE POLICY "plantios_insert" ON plantios FOR INSERT TO authenticated
-  WITH CHECK ((auth.jwt() -> 'app_metadata' ->> 'role') = 'admin');
-
+  WITH CHECK (auth.uid() IS NOT NULL);
 CREATE POLICY "plantios_update" ON plantios FOR UPDATE TO authenticated
-  USING ((auth.jwt() -> 'app_metadata' ->> 'role') = 'admin');
-
+  USING (criado_por = auth.uid())
+  WITH CHECK (criado_por = auth.uid());
 CREATE POLICY "plantios_delete" ON plantios FOR DELETE TO authenticated
-  USING ((auth.jwt() -> 'app_metadata' ->> 'role') = 'admin');
+  USING (criado_por = auth.uid());
 
 -- uploads
 CREATE POLICY "uploads_insert" ON uploads FOR INSERT TO authenticated
-  WITH CHECK ((auth.jwt() -> 'app_metadata' ->> 'role') = 'admin');
-
+  WITH CHECK (auth.uid() IS NOT NULL);
 CREATE POLICY "uploads_update" ON uploads FOR UPDATE TO authenticated
-  USING ((auth.jwt() -> 'app_metadata' ->> 'role') = 'admin');
-
+  USING (criado_por = auth.uid())
+  WITH CHECK (criado_por = auth.uid());
 CREATE POLICY "uploads_delete" ON uploads FOR DELETE TO authenticated
-  USING ((auth.jwt() -> 'app_metadata' ->> 'role') = 'admin');
+  USING (criado_por = auth.uid());
 
 -- ============================================================
 -- RPC FUNCTIONS
