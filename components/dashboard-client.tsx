@@ -287,7 +287,7 @@ export function DashboardClient({ plantios, talhoesAtivos }: Props) {
       .sort(([a], [b]) => a - b)
       .map(([ano, byTalhao]) => {
         const row: { ano: number; [k: string]: number | undefined } = { ano }
-        for (const [talhao, { sum, count }] of byTalhao.entries()) {
+        for (const [talhao, { sum, count }] of Array.from(byTalhao.entries())) {
           row[talhao] = sum / count
         }
         return row
