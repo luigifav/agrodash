@@ -247,6 +247,8 @@ export default function UploadsPage() {
           volume_colhido: r.volume_colhido ?? null,
           unidade_id: r.unidade_sigla ? (unidadeMap.get(r.unidade_sigla.trim()) ?? null) : null,
           produtividade_sc_ha: r.produtividade_sc_ha ?? null,
+          agronomo: r.agronomo_nome ?? null,
+          area_unidade: r.area_unidade ?? 'ha',
           criado_por: user?.id ?? null,
         };
         // Só inclui lat/lon quando há valor — protege contra schemas legados
