@@ -66,37 +66,19 @@ export default function InsightsPage() {
     supabase
       .from('talhoes')
       .select('id, nome')
+      .eq('ativo', true)
       .order('nome')
       .then(({ data }) => {
         if (data) setTalhoes(data)
       })
   }, [])
 
-  async function handleGenerateAnalysis(e: React.FormEvent) {
-    e.preventDefault()
+  async function loadInsights(body: Record<string, unknown>) {
     setLoading(true)
     setError(null)
     setResult(null)
 
     try {
-      const body: Record<string, unknown> = {}
-
-      if (talhaoId.trim()) {
-        body.talhao_id = talhaoId
-      }
-      if (cultura.trim()) {
-        body.cultura = cultura
-      }
-      if (anosInput.trim()) {
-        const anos = anosInput
-          .split(',')
-          .map((y) => parseInt(y.trim()))
-          .filter((y) => !isNaN(y))
-        if (anos.length > 0) {
-          body.anos = anos
-        }
-      }
-
       const response = await fetch('/api/insights', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -115,6 +97,35 @@ export default function InsightsPage() {
     } finally {
       setLoading(false)
     }
+  }
+
+  useEffect(() => {
+    loadInsights({})
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  async function handleGenerateAnalysis(e: React.FormEvent) {
+    e.preventDefault()
+
+    const body: Record<string, unknown> = {}
+
+    if (talhaoId.trim()) {
+      body.talhao_id = talhaoId
+    }
+    if (cultura.trim()) {
+      body.cultura = cultura
+    }
+    if (anosInput.trim()) {
+      const anos = anosInput
+        .split(',')
+        .map((y) => parseInt(y.trim()))
+        .filter((y) => !isNaN(y))
+      if (anos.length > 0) {
+        body.anos = anos
+      }
+    }
+
+    await loadInsights(body)
   }
 
   return (
@@ -207,6 +218,51 @@ export default function InsightsPage() {
 
       {result && (
         <div className="space-y-6">
+          {/* Resumo Card */}
+          <div className="bg-white rounded-lg border border-gray-200 p-6">
+            <h3 className="font-semibold text-gray-900 mb-4">Resumo</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
+              <div>
+                <p className="text-gray-500 mb-1">Período analisado</p>
+                <p className="font-medium text-gray-900">{result.summary.periodo}</p>
+              </div>
+              <div>
+                <p className="text-gray-500 mb-1">Culturas analisadas</p>
+                <p className="font-medium text-gray-900">
+                  {result.summary.culturas_analisadas.length > 0
+                    ? result.summary.culturas_analisadas.join(', ')
+                    : '—'}
+                </p>
+              </div>
+              <div>
+                <p className="text-gray-500 mb-1">Produtividade mín / máx</p>
+                <p className="font-medium text-gray-900">
+                  {result.summary.produtividade_min_sc_ha != null
+                    ? result.summary.produtividade_min_sc_ha.toFixed(1)
+                    : '—'}
+                  {' / '}
+                  {result.summary.produtividade_max_sc_ha != null
+                    ? result.summary.produtividade_max_sc_ha.toFixed(1)
+                    : '—'}{' '}
+                  sc/ha
+                </p>
+              </div>
+              <div>
+                <p className="text-gray-500 mb-1">Melhor / Pior safra</p>
+                <p className="font-medium text-green-700">
+                  {result.summary.melhor_safra
+                    ? `${result.summary.melhor_safra.cultura} ${result.summary.melhor_safra.ano} (${result.summary.melhor_safra.produtividade_sc_ha.toFixed(1)} sc/ha)`
+                    : '—'}
+                </p>
+                <p className="font-medium text-orange-700 mt-1">
+                  {result.summary.pior_safra
+                    ? `${result.summary.pior_safra.cultura} ${result.summary.pior_safra.ano} (${result.summary.pior_safra.produtividade_sc_ha.toFixed(1)} sc/ha)`
+                    : '—'}
+                </p>
+              </div>
+            </div>
+          </div>
+
           {/* Summary Cards */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="bg-white rounded-lg border border-gray-200 p-4">
@@ -400,9 +456,10 @@ export default function InsightsPage() {
         </div>
       )}
 
-      {!result && !loading && !error && (
+      {loading && (
         <div className="bg-gray-50 rounded-lg border border-gray-200 p-12 text-center">
-          <p className="text-gray-600">Preencha os filtros e clique em &quot;Gerar Análise&quot; para ver os insights</p>
+          <Loader className="w-8 h-8 animate-spin text-green-600 mx-auto mb-3" />
+          <p className="text-gray-600">Carregando insights...</p>
         </div>
       )}
     </div>
