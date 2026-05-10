@@ -29,6 +29,8 @@ import {
   Layers,
   Upload as UploadIcon,
 } from 'lucide-react'
+import { TalhoesMap } from './talhoes-map'
+import type { TalhaoMapData } from './talhoes-map'
 
 export const CULTURE_COLORS: Record<string, string> = {
   Soja: '#16a34a',
@@ -54,9 +56,10 @@ export type PlantioResumo = {
 type Props = {
   plantios: PlantioResumo[]
   talhoesAtivos: number
+  talhoesMapData: TalhaoMapData[]
 }
 
-export function DashboardClient({ plantios, talhoesAtivos }: Props) {
+export function DashboardClient({ plantios, talhoesAtivos, talhoesMapData }: Props) {
   const [filterAno, setFilterAno] = useState<string>('all')
   const [filterSafra, setFilterSafra] = useState<string>('all')
   const [filterCultura, setFilterCultura] = useState<string>('all')
@@ -714,6 +717,14 @@ export function DashboardClient({ plantios, talhoesAtivos }: Props) {
           )}
         </div>
       </div>
+
+      {/* Map */}
+      {talhoesMapData.length > 0 && (
+        <div className="bg-white rounded-xl border border-gray-200 p-5 mb-8">
+          <h2 className="font-semibold text-gray-900 mb-4">Mapa dos Talhões</h2>
+          <TalhoesMap talhoes={talhoesMapData} />
+        </div>
+      )}
 
       {/* Summary table */}
       <div className="bg-white rounded-xl border border-gray-200">
