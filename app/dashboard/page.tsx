@@ -22,8 +22,11 @@ export default async function DashboardPage() {
       .order("ano", { ascending: true }),
   ]);
 
+  const { data: plantiosData, error: plantiosError } = plantiosRes;
+  const { error: talhoesError } = talhoesRes;
+
   const plantios: PlantioResumo[] = (
-    (plantiosRes.data as PlantioComDetalhes[] | null) ?? []
+    (plantiosData as PlantioComDetalhes[] | null) ?? []
   ).map((p) => ({
     ano: p.ano,
     area_ha: Number(p.area_ha) || 0,
@@ -36,9 +39,16 @@ export default async function DashboardPage() {
     safra: p.safras?.nome ?? "—",
   }));
 
+  const dataError = plantiosError ?? talhoesError;
+
   return (
     <div className="p-8">
       <h1 className="text-2xl font-bold text-gray-900 mb-6">Dashboard</h1>
+      {dataError && (
+        <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-6 text-red-700 text-sm">
+          Erro ao carregar dados: {dataError.message}
+        </div>
+      )}
       <DashboardClient
         plantios={plantios}
         talhoesAtivos={talhoesRes.count ?? 0}
