@@ -114,17 +114,22 @@ export default function TalhaoDetailPage({ params }: PageProps) {
   let coordinates: { lat: string; lon: string } | null = null;
   if (talhao.geojson) {
     const geojson = talhao.geojson as Record<string, unknown>;
-    const geometry = geojson.geometry as Record<string, unknown>;
     if (
-      geometry?.type === 'Polygon' &&
-      Array.isArray(geometry.coordinates) &&
-      Array.isArray(geometry.coordinates[0]) &&
-      Array.isArray(geometry.coordinates[0][0]) &&
-      geometry.coordinates[0][0].length >= 2
+      geojson.type === 'Point' &&
+      Array.isArray(geojson.coordinates) &&
+      (geojson.coordinates as unknown[]).length >= 2
     ) {
-      const coords = geometry.coordinates[0][0] as number[];
-      const [lon, lat] = [coords[0], coords[1]];
-      coordinates = { lat: lat.toFixed(4), lon: lon.toFixed(4) };
+      const coords = geojson.coordinates as number[];
+      coordinates = { lat: coords[1].toFixed(4), lon: coords[0].toFixed(4) };
+    } else if (
+      geojson.type === 'Polygon' &&
+      Array.isArray(geojson.coordinates) &&
+      Array.isArray((geojson.coordinates as unknown[][])[0]) &&
+      Array.isArray(((geojson.coordinates as unknown[][][])[0])[0]) &&
+      (((geojson.coordinates as unknown[][][])[0])[0] as unknown[]).length >= 2
+    ) {
+      const coords = ((geojson.coordinates as number[][][])[0])[0];
+      coordinates = { lat: coords[1].toFixed(4), lon: coords[0].toFixed(4) };
     }
   }
 
