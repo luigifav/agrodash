@@ -41,6 +41,7 @@ export default function UploadsPage() {
   const [uploads, setUploads] = useState<UploadRecord[]>([]);
   const [fileName, setFileName] = useState<string | null>(null);
   const [rows, setRows] = useState<ParsedRow[]>([]);
+  const [talhaoMatches, setTalhaoMatches] = useState<Record<string, string | null>>({});
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; msg: string } | null>(null);
@@ -66,6 +67,7 @@ export default function UploadsPage() {
 
     setFileName(file.name);
     setRows([]);
+    setTalhaoMatches({});
     setFeedback(null);
     setTruncatedInfo(null);
     setRowErrors({});
@@ -88,8 +90,14 @@ export default function UploadsPage() {
         if (Array.isArray(data)) {
           setRows(data as ParsedRow[]);
         } else {
-          const payload = data as { rows: ParsedRow[]; truncated: boolean; total_rows: number };
+          const payload = data as {
+            rows: ParsedRow[];
+            truncated: boolean;
+            total_rows: number;
+            talhao_matches?: Record<string, string | null>;
+          };
           setRows(payload.rows ?? []);
+          setTalhaoMatches(payload.talhao_matches ?? {});
           if (payload.truncated) {
             setTruncatedInfo({ total: payload.total_rows });
           }
@@ -196,7 +204,12 @@ export default function UploadsPage() {
         (inserted ?? []).forEach((u: { id: string; sigla: string }) => unidadeMap.set(u.sigla, u.id));
       }
 
-      // Cria talhões que ainda não existem
+      // Pré-popula talhaoMap com matches feitos pela IA (nome da planilha → id existente)
+      for (const [nomeNovo, idExistente] of Object.entries(talhaoMatches)) {
+        if (idExistente != null) talhaoMap.set(nomeNovo, idExistente);
+      }
+
+      // Cria talhões que ainda não existem e não foram matched pela IA
       const seen = new Set<string>();
       const newTalhaoNames: string[] = [];
       for (const r of rows) {
@@ -291,6 +304,7 @@ export default function UploadsPage() {
 
       setFeedback({ type: "success", msg: `${rows.length} plantio(s) salvos com sucesso!` });
       setRows([]);
+      setTalhaoMatches({});
       setFileName(null);
       setTruncatedInfo(null);
       setRowErrors({});

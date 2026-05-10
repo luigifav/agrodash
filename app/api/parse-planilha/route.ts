@@ -486,9 +486,55 @@ export async function POST(request: NextRequest) {
 
   const result = applyMapping(rows, mapping);
 
+  // ── AI talhão name matching ───────────────────────────────────────────────────
+  const uniqueTalhaoNames = [
+    ...new Set(result.map((r) => r.talhao_nome).filter(Boolean)),
+  ] as string[];
+
+  const { data: existingTalhoes } = await supabase
+    .from("talhoes")
+    .select("id, nome, canonical_id");
+
+  const talhoesParaComparar =
+    existingTalhoes?.map((t: { id: string; nome: string; canonical_id: string | null }) => ({
+      id: t.canonical_id ?? t.id,
+      nome: t.nome,
+    })) ?? [];
+
+  let talhao_matches: Record<string, string | null> = {};
+
+  if (uniqueTalhaoNames.length > 0 && talhoesParaComparar.length > 0) {
+    try {
+      const matchResult = await parseAIJson<{
+        matches: Record<string, string | null>;
+      }>(
+        anthropic,
+        {
+          model: "claude-haiku-4-5-20251001",
+          max_tokens: 1024,
+          system: `Você é um assistente de dados agrícolas. Dado um conjunto de nomes de talhões de uma nova planilha e os talhões já cadastrados no sistema, identifique quais nomes novos correspondem a talhões já existentes. Considere variações de ano, abreviações e pequenas diferenças ortográficas. Retorne APENAS JSON: { "matches": { "nome_novo": "id_existente_ou_null" } } null significa que é um talhão genuinamente novo.`,
+          messages: [
+            {
+              role: "user",
+              content: JSON.stringify({
+                novos: uniqueTalhaoNames,
+                existentes: talhoesParaComparar,
+              }),
+            },
+          ],
+        },
+        "Falha ao fazer matching de talhões com IA"
+      );
+      talhao_matches = matchResult.matches ?? {};
+    } catch {
+      // Matching failed silently — proceed without it
+    }
+  }
+
   return NextResponse.json({
     rows: result,
     truncated,
     total_rows: totalRows,
+    talhao_matches,
   });
 }
