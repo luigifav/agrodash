@@ -4,6 +4,7 @@ import { useState, useMemo } from 'react'
 import Link from 'next/link'
 import {
   Bar,
+  BarChart,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -15,6 +16,7 @@ import {
   Cell,
   ComposedChart,
   Line,
+  LineChart,
 } from 'recharts'
 import {
   MapPin,
@@ -57,6 +59,7 @@ type Props = {
 export function DashboardClient({ plantios, talhoesAtivos }: Props) {
   const [filterAno, setFilterAno] = useState<string>('all')
   const [filterSafra, setFilterSafra] = useState<string>('all')
+  const [filterCultura, setFilterCultura] = useState<string>('all')
 
   const years = useMemo(
     () => Array.from(new Set(plantios.map((p) => p.ano))).sort((a, b) => a - b),
@@ -71,14 +74,20 @@ export function DashboardClient({ plantios, talhoesAtivos }: Props) {
     [plantios]
   )
 
+  const culturasList = useMemo(
+    () => Array.from(new Set(plantios.map((p) => p.cultura))).sort(),
+    [plantios]
+  )
+
   const filtered = useMemo(
     () =>
       plantios.filter((p) => {
         if (filterAno !== 'all' && p.ano !== Number(filterAno)) return false
         if (filterSafra !== 'all' && p.safra !== filterSafra) return false
+        if (filterCultura !== 'all' && p.cultura !== filterCultura) return false
         return true
       }),
-    [plantios, filterAno, filterSafra]
+    [plantios, filterAno, filterSafra, filterCultura]
   )
 
   // Aggregated rows by (ano, cultura) used for the bar/line chart and table.
@@ -242,6 +251,49 @@ export function DashboardClient({ plantios, talhoesAtivos }: Props) {
   const donutYear =
     filtered.length > 0 ? Math.max(...filtered.map((p) => p.ano)) : null
 
+  const TALHAO_PALETTE = ['#2563eb', '#16a34a', '#dc2626', '#d97706', '#7c3aed', '#0891b2']
+
+  const rankingTalhoes = useMemo(() => {
+    const map = new Map<string, { sum: number; count: number }>()
+    for (const p of filtered) {
+      if (p.produtividade_sc_ha == null) continue
+      const cur = map.get(p.talhao) ?? { sum: 0, count: 0 }
+      cur.sum += p.produtividade_sc_ha
+      cur.count += 1
+      map.set(p.talhao, cur)
+    }
+    return Array.from(map.entries())
+      .map(([talhao, { sum, count }]) => ({ talhao, avg_prod: sum / count }))
+      .sort((a, b) => b.avg_prod - a.avg_prod)
+  }, [filtered])
+
+  const talhaoNames = useMemo(
+    () => Array.from(new Set(filtered.map((p) => p.talhao))).sort(),
+    [filtered]
+  )
+
+  const evolucaoPorTalhao = useMemo(() => {
+    const map = new Map<number, Map<string, { sum: number; count: number }>>()
+    for (const p of filtered) {
+      if (p.produtividade_sc_ha == null) continue
+      if (!map.has(p.ano)) map.set(p.ano, new Map())
+      const byTalhao = map.get(p.ano)!
+      const cur = byTalhao.get(p.talhao) ?? { sum: 0, count: 0 }
+      cur.sum += p.produtividade_sc_ha
+      cur.count += 1
+      byTalhao.set(p.talhao, cur)
+    }
+    return Array.from(map.entries())
+      .sort(([a], [b]) => a - b)
+      .map(([ano, byTalhao]) => {
+        const row: { ano: number; [k: string]: number | undefined } = { ano }
+        for (const [talhao, { sum, count }] of byTalhao.entries()) {
+          row[talhao] = sum / count
+        }
+        return row
+      })
+  }, [filtered])
+
   const statCards = [
     {
       label: 'Talhões Ativos',
@@ -334,6 +386,18 @@ export function DashboardClient({ plantios, talhoesAtivos }: Props) {
           {safrasList.map((s) => (
             <option key={s} value={s}>
               {s}
+            </option>
+          ))}
+        </select>
+        <select
+          value={filterCultura}
+          onChange={(e) => setFilterCultura(e.target.value)}
+          className={selectClass}
+        >
+          <option value="all">Todas as culturas</option>
+          {culturasList.map((c) => (
+            <option key={c} value={c}>
+              {c}
             </option>
           ))}
         </select>
@@ -577,6 +641,75 @@ export function DashboardClient({ plantios, talhoesAtivos }: Props) {
                 />
                 <Legend />
               </PieChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+      </div>
+
+      {/* Ranking + Evolução por Talhão */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-8">
+        {/* Ranking de Talhões por Produtividade */}
+        <div className="lg:col-span-1 bg-white rounded-xl border border-gray-200 p-5">
+          <h2 className="font-semibold text-gray-900 mb-4">
+            Ranking de Talhões por Produtividade
+          </h2>
+          {rankingTalhoes.length === 0 ? (
+            <div className="h-64 flex items-center justify-center text-gray-400 text-sm">
+              Sem dados para exibir
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height={Math.max(200, rankingTalhoes.length * 40)}>
+              <BarChart
+                layout="vertical"
+                data={rankingTalhoes}
+                margin={{ top: 5, right: 20, left: 0, bottom: 5 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" horizontal={false} />
+                <YAxis type="category" dataKey="talhao" width={130} tick={{ fontSize: 12 }} />
+                <XAxis type="number" unit=" sc/ha" tick={{ fontSize: 12 }} />
+                <Tooltip formatter={(value) => [`${Number(value).toFixed(1)} sc/ha`, 'Produtividade']} />
+                <Bar dataKey="avg_prod" radius={[0, 4, 4, 0]}>
+                  {rankingTalhoes.map((_, i) => (
+                    <Cell key={i} fill={TALHAO_PALETTE[i % TALHAO_PALETTE.length]} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+
+        {/* Evolução de Produtividade por Talhão */}
+        <div className="lg:col-span-1 bg-white rounded-xl border border-gray-200 p-5">
+          <h2 className="font-semibold text-gray-900 mb-4">
+            Evolução de Produtividade por Talhão
+          </h2>
+          {evolucaoPorTalhao.length === 0 ? (
+            <div className="h-64 flex items-center justify-center text-gray-400 text-sm">
+              Sem dados para exibir
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height={Math.max(200, rankingTalhoes.length * 40)}>
+              <LineChart
+                data={evolucaoPorTalhao}
+                margin={{ top: 5, right: 20, left: 0, bottom: 5 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <XAxis dataKey="ano" tick={{ fontSize: 12 }} />
+                <YAxis tick={{ fontSize: 12 }} unit=" sc/ha" />
+                <Tooltip formatter={(value) => [`${Number(value).toFixed(1)} sc/ha`]} />
+                <Legend />
+                {talhaoNames.map((talhao, i) => (
+                  <Line
+                    key={talhao}
+                    type="monotone"
+                    dataKey={talhao}
+                    stroke={TALHAO_PALETTE[i % TALHAO_PALETTE.length]}
+                    strokeWidth={2}
+                    dot={{ r: 3 }}
+                    connectNulls
+                  />
+                ))}
+              </LineChart>
             </ResponsiveContainer>
           )}
         </div>
