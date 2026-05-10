@@ -1,7 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { AlertCircle, TrendingUp, CalendarDays, Lightbulb, Loader } from 'lucide-react'
+import { createClient } from '@/lib/supabase/client'
 
 type InsightsResponse = {
   summary: {
@@ -49,6 +50,8 @@ type InsightsResponse = {
   }
 }
 
+const CULTURAS = ['Soja', 'Milho', 'Sorgo', 'Cevada', 'Batata', 'Trigo', 'Feijão']
+
 export default function InsightsPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -56,6 +59,18 @@ export default function InsightsPage() {
   const [anosInput, setAnosInput] = useState('')
   const [cultura, setCultura] = useState('')
   const [talhaoId, setTalhaoId] = useState('')
+  const [talhoes, setTalhoes] = useState<{ id: string; nome: string }[]>([])
+
+  useEffect(() => {
+    const supabase = createClient()
+    supabase
+      .from('talhoes')
+      .select('id, nome')
+      .order('nome')
+      .then(({ data }) => {
+        if (data) setTalhoes(data)
+      })
+  }, [])
 
   async function handleGenerateAnalysis(e: React.FormEvent) {
     e.preventDefault()
@@ -114,28 +129,34 @@ export default function InsightsPage() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Talhão (ID)
+              Talhão
             </label>
-            <input
-              type="text"
+            <select
               value={talhaoId}
               onChange={(e) => setTalhaoId(e.target.value)}
-              placeholder="ID do talhão (opcional)"
-              className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
-            />
+              className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 bg-white"
+            >
+              <option value="">Todos os talhões</option>
+              {talhoes.map((t) => (
+                <option key={t.id} value={t.id}>{t.nome}</option>
+              ))}
+            </select>
           </div>
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Cultura
             </label>
-            <input
-              type="text"
+            <select
               value={cultura}
               onChange={(e) => setCultura(e.target.value)}
-              placeholder="Nome da cultura (opcional)"
-              className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
-            />
+              className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 bg-white"
+            >
+              <option value="">Todas as culturas</option>
+              {CULTURAS.map((c) => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
           </div>
 
           <div>
