@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import Link from 'next/link'
 import {
   Bar,
@@ -28,9 +28,29 @@ import {
   Clock,
   Layers,
   Upload as UploadIcon,
+  Lightbulb,
+  Loader2,
+  RefreshCw,
 } from 'lucide-react'
 import { TalhoesMap } from './talhoes-map'
 import type { TalhaoMapData } from './talhoes-map'
+
+type InsightsData = {
+  summary: {
+    produtividade_media_sc_ha: number | null
+    melhor_safra: {
+      cultura: string
+      ano: number
+      produtividade_sc_ha: number
+    } | null
+  }
+  insights: {
+    tendencia: string
+    melhor_epoca: string
+    alertas: string[]
+    recomendacoes: string[]
+  }
+}
 
 export const CULTURE_COLORS: Record<string, string> = {
   Soja: '#16a34a',
@@ -63,6 +83,8 @@ export function DashboardClient({ plantios, talhoesAtivos, talhoesMapData }: Pro
   const [filterAno, setFilterAno] = useState<string>('all')
   const [filterSafra, setFilterSafra] = useState<string>('all')
   const [filterCultura, setFilterCultura] = useState<string>('all')
+  const [insights, setInsights] = useState<InsightsData | null>(null)
+  const [insightsLoading, setInsightsLoading] = useState(false)
 
   const years = useMemo(
     () => Array.from(new Set(plantios.map((p) => p.ano))).sort((a, b) => a - b),
@@ -296,6 +318,23 @@ export function DashboardClient({ plantios, talhoesAtivos, talhoesMapData }: Pro
         return row
       })
   }, [filtered])
+
+  const loadInsights = useCallback(async () => {
+    setInsightsLoading(true)
+    try {
+      const res = await fetch('/api/insights', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setInsights(data)
+      }
+    } finally {
+      setInsightsLoading(false)
+    }
+  }, [])
 
   const statCards = [
     {
@@ -725,6 +764,78 @@ export function DashboardClient({ plantios, talhoesAtivos, talhoesMapData }: Pro
           <TalhoesMap talhoes={talhoesMapData} />
         </div>
       )}
+
+      {/* AI Insights card */}
+      <div className="bg-white rounded-xl border border-gray-200 mb-8">
+        <div className="p-5 border-b border-gray-100 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Lightbulb className="w-5 h-5 text-yellow-500" />
+            <h2 className="font-semibold text-gray-900">Insights com IA</h2>
+          </div>
+          <button
+            onClick={loadInsights}
+            disabled={insightsLoading}
+            className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-white bg-green-600 hover:bg-green-700 disabled:bg-gray-400 rounded-lg transition-colors"
+          >
+            <RefreshCw className={`w-4 h-4 ${insightsLoading ? 'animate-spin' : ''}`} />
+            {insights ? 'Atualizar' : 'Gerar análise'}
+          </button>
+        </div>
+        <div className="p-5">
+          {insightsLoading ? (
+            <div className="flex items-center justify-center py-10 gap-3 text-gray-500">
+              <Loader2 className="w-6 h-6 animate-spin" />
+              <span className="text-sm">Gerando insights…</span>
+            </div>
+          ) : !insights ? (
+            <div className="flex items-center justify-center py-10 text-sm text-gray-400">
+              Clique em Gerar análise para obter insights inteligentes
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {/* Tendência */}
+              <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg border border-blue-200 p-4">
+                <h3 className="font-semibold text-blue-900 mb-2">Tendência</h3>
+                <p className="text-sm text-blue-800">{insights.insights.tendencia}</p>
+              </div>
+
+              {/* Melhor Época */}
+              <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-lg border border-green-200 p-4">
+                <h3 className="font-semibold text-green-900 mb-2">Melhor Época</h3>
+                <p className="text-sm text-green-800">{insights.insights.melhor_epoca}</p>
+              </div>
+
+              {/* Alertas */}
+              <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-lg border border-orange-200 p-4">
+                <h3 className="font-semibold text-orange-900 mb-2">Alertas</h3>
+                <ul className="space-y-1">
+                  {insights.insights.alertas.length > 0 ? (
+                    insights.insights.alertas.map((alerta, idx) => (
+                      <li key={idx} className="text-sm text-orange-800">• {alerta}</li>
+                    ))
+                  ) : (
+                    <li className="text-sm text-orange-800">Nenhum alerta identificado</li>
+                  )}
+                </ul>
+              </div>
+
+              {/* Recomendações */}
+              <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg border border-purple-200 p-4">
+                <h3 className="font-semibold text-purple-900 mb-2">Recomendações</h3>
+                <ul className="space-y-1">
+                  {insights.insights.recomendacoes.length > 0 ? (
+                    insights.insights.recomendacoes.map((rec, idx) => (
+                      <li key={idx} className="text-sm text-purple-800">• {rec}</li>
+                    ))
+                  ) : (
+                    <li className="text-sm text-purple-800">Nenhuma recomendação disponível</li>
+                  )}
+                </ul>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
 
       {/* Summary table */}
       <div className="bg-white rounded-xl border border-gray-200">
