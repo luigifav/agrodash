@@ -135,10 +135,10 @@ export default function TalhaoDetailPage({ params }: PageProps) {
 
   // Calculate summary metrics
   const totalArea = plantios.reduce((sum, p) => sum + (p.area_ha || 0), 0);
+  const withProd = plantios.filter(p => p.produtividade_sc_ha != null);
   const avgProductivity =
-    plantios.length > 0
-      ? plantios.reduce((sum, p) => sum + (p.produtividade_sc_ha || 0), 0) /
-        plantios.length
+    withProd.length > 0
+      ? withProd.reduce((sum, p) => sum + (p.produtividade_sc_ha as number), 0) / withProd.length
       : 0;
 
   // Prepare chart data - group by year
