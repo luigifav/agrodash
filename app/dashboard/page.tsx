@@ -18,12 +18,12 @@ export default async function DashboardPage() {
         `id, ano, data_plantio, data_colheita,
          area_ha, volume_colhido, produtividade_sc_ha, agronomo,
          latitude, longitude, talhao_id,
-         talhoes(nome), culturas(nome), safras(nome), unidades(sigla)`
+         talhoes(nome, canonical:talhoes!canonical_id(nome)), culturas(nome), safras(nome), unidades(sigla)`
       )
       .order("ano", { ascending: true }),
     supabase
       .from("talhoes")
-      .select("id, nome, geojson")
+      .select("id, nome, canonical_id, canonical:talhoes!canonical_id(nome)")
       .eq("ativo", true),
   ]);
 
@@ -66,7 +66,7 @@ export default async function DashboardPage() {
     produtividade_sc_ha:
       p.produtividade_sc_ha != null ? Number(p.produtividade_sc_ha) : null,
     data_colheita: p.data_colheita ?? null,
-    talhao: p.talhoes?.nome ?? "—",
+    talhao: p.talhoes?.canonical?.nome ?? p.talhoes?.nome ?? "—",
     cultura: p.culturas?.nome ?? "—",
     safra: p.safras?.nome ?? "—",
   }));
