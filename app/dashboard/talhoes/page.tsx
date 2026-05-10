@@ -3,6 +3,7 @@ import { MapPin } from "lucide-react";
 import Link from "next/link";
 import { TalhoesMap } from "@/components/talhoes-map";
 import type { TalhaoMapData } from "@/components/talhoes-map";
+import { NormalizarTalhoesButton } from "@/components/normalizar-talhoes-button";
 
 export default async function TalhoesPage() {
   const supabase = await createClient();
@@ -55,7 +56,10 @@ export default async function TalhoesPage() {
 
   return (
     <div className="p-8">
-      <h1 className="text-2xl font-bold text-gray-900 mb-6">Talhões</h1>
+      <div className="flex items-start justify-between mb-6">
+        <h1 className="text-2xl font-bold text-gray-900">Talhões</h1>
+        <NormalizarTalhoesButton />
+      </div>
 
       {mapData.length > 0 && (
         <div className="mb-8">
