@@ -85,6 +85,7 @@ export function DashboardClient({ plantios, talhoesAtivos, talhoesMapData }: Pro
   const [filterCultura, setFilterCultura] = useState<string>('all')
   const [insights, setInsights] = useState<InsightsData | null>(null)
   const [insightsLoading, setInsightsLoading] = useState(false)
+  const [showAllRanking, setShowAllRanking] = useState(false)
 
   const years = useMemo(
     () => Array.from(new Set(plantios.map((p) => p.ano))).sort((a, b) => a - b),
@@ -292,10 +293,16 @@ export function DashboardClient({ plantios, talhoesAtivos, talhoesMapData }: Pro
       .sort((a, b) => b.avg_prod - a.avg_prod)
   }, [filtered])
 
-  const talhaoNames = useMemo(
-    () => Array.from(new Set(filtered.map((p) => p.talhao))).sort(),
-    [filtered]
-  )
+  const topTalhaoNames = useMemo(() => {
+    const areaMap = new Map<string, number>()
+    for (const p of filtered) {
+      areaMap.set(p.talhao, (areaMap.get(p.talhao) ?? 0) + (p.area_ha ?? 0))
+    }
+    return Array.from(areaMap.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 8)
+      .map(([talhao]) => talhao)
+  }, [filtered])
 
   const evolucaoPorTalhao = useMemo(() => {
     const map = new Map<number, Map<string, { sum: number; count: number }>>()
@@ -699,32 +706,50 @@ export function DashboardClient({ plantios, talhoesAtivos, talhoesMapData }: Pro
             <div className="h-64 flex items-center justify-center text-gray-400 text-sm">
               Sem dados para exibir
             </div>
-          ) : (
-            <ResponsiveContainer width="100%" height={Math.max(200, rankingTalhoes.length * 40)}>
-              <BarChart
-                layout="vertical"
-                data={rankingTalhoes}
-                margin={{ top: 5, right: 20, left: 0, bottom: 5 }}
-              >
-                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" horizontal={false} />
-                <YAxis type="category" dataKey="talhao" width={130} tick={{ fontSize: 12 }} />
-                <XAxis type="number" unit=" sc/ha" tick={{ fontSize: 12 }} />
-                <Tooltip formatter={(value) => [`${Number(value).toFixed(1)} sc/ha`, 'Produtividade']} />
-                <Bar dataKey="avg_prod" radius={[0, 4, 4, 0]}>
-                  {rankingTalhoes.map((_, i) => (
-                    <Cell key={i} fill={TALHAO_PALETTE[i % TALHAO_PALETTE.length]} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          )}
+          ) : (() => {
+            const rankingDisplay = showAllRanking ? rankingTalhoes : rankingTalhoes.slice(0, 15)
+            return (
+              <>
+                <ResponsiveContainer width="100%" height={Math.max(200, rankingDisplay.length * 40)}>
+                  <BarChart
+                    layout="vertical"
+                    data={rankingDisplay}
+                    margin={{ top: 5, right: 20, left: 0, bottom: 5 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" horizontal={false} />
+                    <YAxis type="category" dataKey="talhao" width={150} tick={{ fontSize: 12 }} />
+                    <XAxis type="number" unit=" sc/ha" tick={{ fontSize: 12 }} />
+                    <Tooltip formatter={(value) => [`${Number(value).toFixed(1)} sc/ha`, 'Produtividade']} />
+                    <Bar dataKey="avg_prod" radius={[0, 4, 4, 0]}>
+                      {rankingDisplay.map((_, i) => (
+                        <Cell key={i} fill={TALHAO_PALETTE[i % TALHAO_PALETTE.length]} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+                {rankingTalhoes.length > 15 && (
+                  <div className="mt-3 text-center">
+                    <button
+                      onClick={() => setShowAllRanking((v) => !v)}
+                      className="text-sm text-green-700 hover:text-green-900 font-medium underline-offset-2 hover:underline"
+                    >
+                      {showAllRanking
+                        ? 'Mostrar menos'
+                        : `Ver todos os ${rankingTalhoes.length} talhões`}
+                    </button>
+                  </div>
+                )}
+              </>
+            )
+          })()}
         </div>
 
         {/* Evolução de Produtividade por Talhão */}
         <div className="lg:col-span-1 bg-white rounded-xl border border-gray-200 p-5">
-          <h2 className="font-semibold text-gray-900 mb-4">
+          <h2 className="font-semibold text-gray-900 mb-1">
             Evolução de Produtividade por Talhão
           </h2>
+          <p className="text-xs text-gray-500 mb-4">Top 8 talhões por área plantada</p>
           {evolucaoPorTalhao.length === 0 ? (
             <div className="h-64 flex items-center justify-center text-gray-400 text-sm">
               Sem dados para exibir
@@ -740,7 +765,7 @@ export function DashboardClient({ plantios, talhoesAtivos, talhoesMapData }: Pro
                 <YAxis tick={{ fontSize: 12 }} unit=" sc/ha" />
                 <Tooltip formatter={(value) => [`${Number(value).toFixed(1)} sc/ha`]} />
                 <Legend />
-                {talhaoNames.map((talhao, i) => (
+                {topTalhaoNames.map((talhao, i) => (
                   <Line
                     key={talhao}
                     type="monotone"
