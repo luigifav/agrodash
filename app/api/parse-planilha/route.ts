@@ -487,9 +487,9 @@ export async function POST(request: NextRequest) {
   const result = applyMapping(rows, mapping);
 
   // ── AI talhão name matching ───────────────────────────────────────────────────
-  const uniqueTalhaoNames = [
-    ...new Set(result.map((r) => r.talhao_nome).filter(Boolean)),
-  ] as string[];
+  const uniqueTalhaoNames = Array.from(
+    new Set(result.map((r) => r.talhao_nome).filter(Boolean))
+  ) as string[];
 
   const { data: existingTalhoes } = await supabase
     .from("talhoes")
