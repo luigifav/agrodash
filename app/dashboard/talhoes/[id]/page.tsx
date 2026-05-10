@@ -111,25 +111,16 @@ export default function TalhaoDetailPage({ params }: PageProps) {
   }
 
   // Extract coordinates from geojson if available
-  let coordinates: { lat: string; lon: string } | null = null;
+  let coordinates: { lat: string; lon: string } | null = null
   if (talhao.geojson) {
-    const geojson = talhao.geojson as Record<string, unknown>;
-    if (
-      geojson.type === 'Point' &&
-      Array.isArray(geojson.coordinates) &&
-      (geojson.coordinates as unknown[]).length >= 2
-    ) {
-      const coords = geojson.coordinates as number[];
-      coordinates = { lat: coords[1].toFixed(4), lon: coords[0].toFixed(4) };
-    } else if (
-      geojson.type === 'Polygon' &&
-      Array.isArray(geojson.coordinates) &&
-      Array.isArray((geojson.coordinates as unknown[][])[0]) &&
-      Array.isArray(((geojson.coordinates as unknown[][][])[0])[0]) &&
-      (((geojson.coordinates as unknown[][][])[0])[0] as unknown[]).length >= 2
-    ) {
-      const coords = ((geojson.coordinates as number[][][])[0])[0];
-      coordinates = { lat: coords[1].toFixed(4), lon: coords[0].toFixed(4) };
+    const geo = talhao.geojson as Record<string, unknown>
+    if (geo.type === 'Point' && Array.isArray(geo.coordinates)) {
+      const [lon, lat] = geo.coordinates as number[]
+      coordinates = { lat: lat.toFixed(4), lon: lon.toFixed(4) }
+    } else if (geo.type === 'Polygon') {
+      const g = geo as { coordinates: number[][][] }
+      const [lon, lat] = g.coordinates[0][0]
+      coordinates = { lat: lat.toFixed(4), lon: lon.toFixed(4) }
     }
   }
 
