@@ -249,6 +249,7 @@ export type PlantioComDetalhes = Pick<
   | "agronomo"
   | "latitude"
   | "longitude"
+  | "talhao_id"
 > & {
   talhoes: Pick<Tables<"talhoes">, "nome"> | null;
   culturas: Pick<Tables<"culturas">, "nome"> | null;
