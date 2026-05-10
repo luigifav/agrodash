@@ -75,6 +75,7 @@ export type Database = {
           geojson: Json | null;
           ativo: boolean;
           criado_em: string;
+          canonical_id: string | null;
         };
         Insert: {
           id?: string;
@@ -82,6 +83,7 @@ export type Database = {
           geojson?: Json | null;
           ativo?: boolean;
           criado_em?: string;
+          canonical_id?: string | null;
         };
         Update: {
           id?: string;
@@ -89,6 +91,7 @@ export type Database = {
           geojson?: Json | null;
           ativo?: boolean;
           criado_em?: string;
+          canonical_id?: string | null;
         };
         Relationships: [];
       };
