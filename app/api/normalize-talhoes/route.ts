@@ -15,6 +15,23 @@ function stripFences(text: string): string {
   return text.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/, "");
 }
 
+async function callWithRetry<T>(fn: () => Promise<T>, retries = 3): Promise<T> {
+  for (let i = 0; i < retries; i++) {
+    try {
+      return await fn();
+    } catch (err: unknown) {
+      const isRateLimit =
+        err instanceof Error && err.message.includes("rate_limit");
+      if (isRateLimit && i < retries - 1) {
+        await new Promise((r) => setTimeout(r, 2000 * (i + 1))); // 2s, 4s, 6s
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw new Error("Máximo de tentativas atingido");
+}
+
 type NormGroup = { canonical_id: string; alias_ids: string[] };
 
 export async function POST() {
@@ -50,9 +67,10 @@ export async function POST() {
 
   let grupos: NormGroup[];
   try {
-    const batchResults = await Promise.all(
-      batches.map(async (batch) => {
-        const msg = await anthropic.messages.create({
+    const batchResults: NormGroup[][] = [];
+    for (const batch of batches) {
+      const resultado = await callWithRetry(() =>
+        anthropic.messages.create({
           model: "claude-haiku-4-5-20251001",
           max_tokens: 8192,
           system: SYSTEM_PROMPT,
@@ -62,19 +80,27 @@ export async function POST() {
               content: JSON.stringify(batch.map((t) => ({ id: t.id, nome: t.nome }))),
             },
           ],
-        });
+        })
+      );
 
-        if (msg.stop_reason !== "end_turn") {
-          throw new Error("Resposta da IA incompleta. Tente novamente ou reduza o número de talhões.");
-        }
+      if (resultado.stop_reason !== "end_turn") {
+        throw new Error("Resposta da IA incompleta. Tente novamente ou reduza o número de talhões.");
+      }
 
-        const content = msg.content[0];
-        if (content.type !== "text") throw new Error("Resposta inesperada da IA");
-        return JSON.parse(stripFences(content.text)) as NormGroup[];
-      })
-    );
+      const content = resultado.content[0];
+      if (content.type !== "text") throw new Error("Resposta inesperada da IA");
+      batchResults.push(JSON.parse(stripFences(content.text)) as NormGroup[]);
+      await new Promise((r) => setTimeout(r, 1000)); // pausa de 1s entre lotes
+    }
     grupos = batchResults.flat();
   } catch (err) {
+    const isRateLimit = err instanceof Error && err.message.includes("rate_limit");
+    if (isRateLimit) {
+      return NextResponse.json(
+        { error: "Muitas requisições simultâneas. Aguarde alguns segundos e tente novamente." },
+        { status: 429 }
+      );
+    }
     const msg = err instanceof Error ? err.message : "Erro desconhecido";
     return NextResponse.json({ error: msg }, { status: 500 });
   }
