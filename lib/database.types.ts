@@ -254,7 +254,7 @@ export type PlantioComDetalhes = Pick<
   | "longitude"
   | "talhao_id"
 > & {
-  talhoes: Pick<Tables<"talhoes">, "nome"> | null;
+  talhoes: (Pick<Tables<"talhoes">, "nome"> & { canonical: Pick<Tables<"talhoes">, "nome"> | null }) | null;
   culturas: Pick<Tables<"culturas">, "nome"> | null;
   safras: Pick<Tables<"safras">, "nome"> | null;
   unidades: Pick<Tables<"unidades">, "sigla"> | null;

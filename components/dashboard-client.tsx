@@ -116,16 +116,17 @@ export function DashboardClient({ plantios, talhoesAtivos, talhoesMapData }: Pro
     [plantios, filterAno, filterSafra, filterCultura]
   )
 
-  // Aggregated rows by (ano, cultura) used for the bar/line chart and table.
+  // Aggregated rows by (ano, talhao, cultura) used for the bar/line chart and table.
   const resumoAnoCultura = useMemo(() => {
     const grouped = new Map<
       string,
-      { ano: number; cultura: string; total_area: number; total_volume: number; sumProd: number; countProd: number }
+      { ano: number; talhao: string; cultura: string; total_area: number; total_volume: number; sumProd: number; countProd: number }
     >()
     for (const p of filtered) {
-      const key = `${p.ano}__${p.cultura}`
+      const key = `${p.ano}__${p.talhao}__${p.cultura}`
       const cur = grouped.get(key) ?? {
         ano: p.ano,
+        talhao: p.talhao,
         cultura: p.cultura,
         total_area: 0,
         total_volume: 0,
@@ -142,6 +143,7 @@ export function DashboardClient({ plantios, talhoesAtivos, talhoesMapData }: Pro
     }
     return Array.from(grouped.values()).map((r) => ({
       ano: r.ano,
+      talhao: r.talhao,
       cultura: r.cultura,
       total_area: r.total_area,
       total_volume: r.total_volume,
@@ -380,7 +382,7 @@ export function DashboardClient({ plantios, talhoesAtivos, talhoesMapData }: Pro
   const tableRows = useMemo(
     () =>
       [...resumoAnoCultura].sort(
-        (a, b) => b.ano - a.ano || a.cultura.localeCompare(b.cultura)
+        (a, b) => b.ano - a.ano || a.talhao.localeCompare(b.talhao) || a.cultura.localeCompare(b.cultura)
       ),
     [resumoAnoCultura]
   )
@@ -755,29 +757,47 @@ export function DashboardClient({ plantios, talhoesAtivos, talhoesMapData }: Pro
               Sem dados para exibir
             </div>
           ) : (
-            <ResponsiveContainer width="100%" height={Math.max(200, rankingTalhoes.length * 40)}>
-              <LineChart
-                data={evolucaoPorTalhao}
-                margin={{ top: 5, right: 20, left: 0, bottom: 5 }}
-              >
-                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                <XAxis dataKey="ano" tick={{ fontSize: 12 }} />
-                <YAxis tick={{ fontSize: 12 }} unit=" sc/ha" />
-                <Tooltip formatter={(value) => [`${Number(value).toFixed(1)} sc/ha`]} />
-                <Legend />
-                {topTalhaoNames.map((talhao, i) => (
-                  <Line
-                    key={talhao}
-                    type="monotone"
-                    dataKey={talhao}
-                    stroke={TALHAO_PALETTE[i % TALHAO_PALETTE.length]}
-                    strokeWidth={2}
-                    dot={{ r: 3 }}
-                    connectNulls
+            <>
+              <ResponsiveContainer width="100%" height={280}>
+                <LineChart
+                  data={evolucaoPorTalhao}
+                  margin={{ top: 5, right: 20, left: 0, bottom: 5 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                  <XAxis dataKey="ano" tick={{ fontSize: 12 }} />
+                  <YAxis tick={{ fontSize: 12 }} unit=" sc/ha" />
+                  <Tooltip
+                    content={({ active, payload, label }) => {
+                      if (!active || !payload?.length) return null
+                      return (
+                        <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-2 text-xs">
+                          {payload.map((entry) => (
+                            <div key={entry.dataKey as string} style={{ color: entry.color }} className="py-0.5">
+                              Talhão: {entry.name} — Ano: {label} — Produtividade: {Number(entry.value).toFixed(1)} sc/ha
+                            </div>
+                          ))}
+                        </div>
+                      )
+                    }}
                   />
-                ))}
-              </LineChart>
-            </ResponsiveContainer>
+                  <Legend />
+                  {topTalhaoNames.map((talhao, i) => (
+                    <Line
+                      key={talhao}
+                      type="monotone"
+                      dataKey={talhao}
+                      stroke={TALHAO_PALETTE[i % TALHAO_PALETTE.length]}
+                      strokeWidth={2}
+                      dot={{ r: 3 }}
+                      connectNulls
+                    />
+                  ))}
+                </LineChart>
+              </ResponsiveContainer>
+              <p className="text-xs text-gray-400 text-center mt-2">
+                Exibindo os 8 talhões com maior área plantada
+              </p>
+            </>
           )}
         </div>
       </div>
@@ -877,12 +897,12 @@ export function DashboardClient({ plantios, talhoesAtivos, talhoesMapData }: Pro
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-100">
-                  {['Ano', 'Cultura', 'Área Total (ha)', 'Volume Total (sc)', 'Prod. Média (sc/ha)'].map(
+                  {['Ano', 'Talhão', 'Cultura', 'Área Total (ha)', 'Volume Total (sc)', 'Prod. Média (sc/ha)'].map(
                     (h, i) => (
                       <th
                         key={h}
                         className={`px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider ${
-                          i >= 2 ? 'text-right' : 'text-left'
+                          i >= 3 ? 'text-right' : 'text-left'
                         }`}
                       >
                         {h}
@@ -894,10 +914,11 @@ export function DashboardClient({ plantios, talhoesAtivos, talhoesMapData }: Pro
               <tbody>
                 {tableRows.map((r) => (
                   <tr
-                    key={`${r.ano}-${r.cultura}`}
+                    key={`${r.ano}-${r.talhao}-${r.cultura}`}
                     className="border-b border-gray-50 hover:bg-gray-50"
                   >
                     <td className="px-5 py-3 text-gray-900">{r.ano}</td>
+                    <td className="px-5 py-3 text-gray-600">{r.talhao}</td>
                     <td className="px-5 py-3 text-gray-600">{r.cultura}</td>
                     <td className="px-5 py-3 text-right text-gray-600">
                       {r.total_area.toFixed(1)}
