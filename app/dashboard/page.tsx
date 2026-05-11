@@ -23,7 +23,7 @@ export default async function DashboardPage() {
       .order("ano", { ascending: true }),
     supabase
       .from("talhoes")
-      .select("id, nome, canonical_id, canonical:talhoes!canonical_id(nome)")
+      .select("id, nome, geojson")
       .eq("ativo", true),
   ]);
 
