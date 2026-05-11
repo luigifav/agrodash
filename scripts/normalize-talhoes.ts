@@ -2,10 +2,15 @@ import Anthropic from '@anthropic-ai/sdk'
 import { createClient } from '@supabase/supabase-js'
 import * as fs from 'fs'
 import * as path from 'path'
-import * as dotenv from 'dotenv'
 
-// Carrega .env.local
-dotenv.config({ path: path.resolve(process.cwd(), '.env.local') })
+// Carrega .env.local manualmente (sem dependência de dotenv)
+const envPath = path.resolve(process.cwd(), '.env.local')
+if (fs.existsSync(envPath)) {
+  for (const line of fs.readFileSync(envPath, 'utf-8').split('\n')) {
+    const match = line.match(/^([^#=]+)=(.*)$/)
+    if (match) process.env[match[1].trim()] = match[2].trim().replace(/^["']|["']$/g, '')
+  }
+}
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
