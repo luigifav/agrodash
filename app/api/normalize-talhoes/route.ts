@@ -42,23 +42,38 @@ export async function POST() {
 
   const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
+  const BATCH_SIZE = 80;
+  const batches: typeof talhoes[] = [];
+  for (let i = 0; i < talhoes.length; i += BATCH_SIZE) {
+    batches.push(talhoes.slice(i, i + BATCH_SIZE));
+  }
+
   let grupos: NormGroup[];
   try {
-    const msg = await anthropic.messages.create({
-      model: "claude-haiku-4-5-20251001",
-      max_tokens: 2048,
-      system: SYSTEM_PROMPT,
-      messages: [
-        {
-          role: "user",
-          content: JSON.stringify(talhoes.map((t) => ({ id: t.id, nome: t.nome }))),
-        },
-      ],
-    });
+    const batchResults = await Promise.all(
+      batches.map(async (batch) => {
+        const msg = await anthropic.messages.create({
+          model: "claude-haiku-4-5-20251001",
+          max_tokens: 8192,
+          system: SYSTEM_PROMPT,
+          messages: [
+            {
+              role: "user",
+              content: JSON.stringify(batch.map((t) => ({ id: t.id, nome: t.nome }))),
+            },
+          ],
+        });
 
-    const content = msg.content[0];
-    if (content.type !== "text") throw new Error("Resposta inesperada da IA");
-    grupos = JSON.parse(stripFences(content.text)) as NormGroup[];
+        if (msg.stop_reason !== "end_turn") {
+          throw new Error("Resposta da IA incompleta. Tente novamente ou reduza o número de talhões.");
+        }
+
+        const content = msg.content[0];
+        if (content.type !== "text") throw new Error("Resposta inesperada da IA");
+        return JSON.parse(stripFences(content.text)) as NormGroup[];
+      })
+    );
+    grupos = batchResults.flat();
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Erro desconhecido";
     return NextResponse.json({ error: msg }, { status: 500 });
