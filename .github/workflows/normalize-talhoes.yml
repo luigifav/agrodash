@@ -1,0 +1,39 @@
+name: Normalize Talhões
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Executar em modo dry-run (sem salvar alterações)'
+        required: false
+        default: 'true'
+        type: boolean
+
+jobs:
+  normalize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Instalar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Instalar Vercel CLI
+        run: npm install -g vercel
+
+      - name: Baixar variáveis de ambiente do Vercel
+        run: vercel env pull .env.local --token=${{ secrets.VERCEL_TOKEN }} --yes
+
+      - name: Instalar dependências do projeto
+        run: npm ci
+
+      - name: Rodar normalizador
+        env:
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: npx tsx scripts/normalize-talhoes.ts
