@@ -2,122 +2,144 @@ import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@/lib/supabase/server";
 
-const SYSTEM_PROMPT = `Você é um assistente especializado em dados agrícolas brasileiros.
-Analise os nomes de talhões abaixo e agrupe os que claramente representam
-o mesmo talhão físico. Considere variações de ano (2022, 23/24, 22/23),
-abreviações, diferenças de capitalização e sufixos como Soja, Verão, Safrinha.
-Retorne APENAS JSON válido, sem markdown, no formato:
-[{ "canonical_id": "uuid_do_talhao_mais_descritivo", "alias_ids": ["uuid1", "uuid2"] }]
-Se um talhão não tiver duplicatas, não inclua no array.
-IDs e nomes dos talhões:`;
+const SYSTEM_PROMPT = `Você é um especialista em nomenclatura de talhões agrícolas brasileiros.
+Identifique quais talhões da lista representam o mesmo campo físico.
+
+REGRAS — considere iguais quando houver:
+- Variações de pivô: PV, Pv, pv, Pivô, Pivo, PIVO
+- Números equivalentes: 3, III, Três, tres
+- Diferenças de acento: seleçoes = seleções, area = área
+- Sufixos de ano: 2022, 2023, 22/23, 23/24 (ignore)
+- Sufixos de cultura: Soja, Milho, Verão, Safrinha (ignore)
+- Abreviações: Faz. = Fazenda, Prop. = Propriedade
+- Capitalização diferente (ignore completamente)
+
+Para cada grupo de talhões iguais, escolha como canônico o de
+nome mais completo e legível.
+
+Retorne APENAS JSON válido sem markdown:
+[
+  {
+    "canonical_id": "uuid_do_talhao_canonico",
+    "alias_ids": ["uuid_alias_1", "uuid_alias_2"]
+  }
+]
+Inclua apenas grupos com 2+ membros. Talhões únicos não aparecem.`;
 
 function stripFences(text: string): string {
-  return text.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/, "");
+  return text.trim()
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/\s*```\s*$/, '');
 }
 
-async function callWithRetry<T>(fn: () => Promise<T>, retries = 3): Promise<T> {
-  for (let i = 0; i < retries; i++) {
-    try {
-      return await fn();
-    } catch (err: unknown) {
-      const isRateLimit =
-        err instanceof Error && err.message.includes("rate_limit");
-      if (isRateLimit && i < retries - 1) {
-        await new Promise((r) => setTimeout(r, 2000 * (i + 1))); // 2s, 4s, 6s
+async function comRetry<T>(fn: () => Promise<T>, tentativas = 3): Promise<T> {
+  for (let i = 0; i < tentativas; i++) {
+    try { return await fn() }
+    catch (err: unknown) {
+      const e = err as Error;
+      if (e.message?.includes('rate_limit') && i < tentativas - 1) {
+        await new Promise(r => setTimeout(r, 2000 * (i + 1)));
         continue;
       }
       throw err;
     }
   }
-  throw new Error("Máximo de tentativas atingido");
+  throw new Error('Máximo de tentativas atingido');
 }
 
 type NormGroup = { canonical_id: string; alias_ids: string[] };
 
 export async function POST() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { data: { user } } = await supabase.auth.getUser();
   if (!user) {
-    return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+    return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
   }
 
-  const { data, error } = await supabase
-    .from("talhoes")
-    .select("id, nome, canonical_id");
+  const { data: talhoes, error: fetchError } = await supabase
+    .from('talhoes')
+    .select('id, nome, criado_em')
+    .eq('ativo', true)
+    .order('criado_em', { ascending: true });
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  if (fetchError) {
+    return NextResponse.json({ error: fetchError.message }, { status: 500 });
   }
 
-  const talhoes = (data ?? []).filter((t) => !t.canonical_id);
-
-  if (talhoes.length < 2) {
-    return NextResponse.json({ message: "Nenhuma normalização necessária" });
+  if (!talhoes || talhoes.length < 2) {
+    return NextResponse.json({ message: 'Nada a normalizar' });
   }
 
   const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-  const BATCH_SIZE = 80;
-  const batches: typeof talhoes[] = [];
-  for (let i = 0; i < talhoes.length; i += BATCH_SIZE) {
-    batches.push(talhoes.slice(i, i + BATCH_SIZE));
-  }
-
   let grupos: NormGroup[];
   try {
-    const batchResults: NormGroup[][] = [];
-    for (const batch of batches) {
-      const resultado = await callWithRetry(() =>
-        anthropic.messages.create({
-          model: "claude-haiku-4-5-20251001",
-          max_tokens: 8192,
-          system: SYSTEM_PROMPT,
-          messages: [
-            {
-              role: "user",
-              content: JSON.stringify(batch.map((t) => ({ id: t.id, nome: t.nome }))),
-            },
-          ],
-        })
-      );
+    const resultado = await comRetry(() =>
+      anthropic.messages.create({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 4096,
+        system: SYSTEM_PROMPT,
+        messages: [
+          {
+            role: 'user',
+            content: JSON.stringify(talhoes.map(t => ({ id: t.id, nome: t.nome }))),
+          },
+        ],
+      })
+    );
 
-      if (resultado.stop_reason !== "end_turn") {
-        throw new Error("Resposta da IA incompleta. Tente novamente ou reduza o número de talhões.");
-      }
-
-      const content = resultado.content[0];
-      if (content.type !== "text") throw new Error("Resposta inesperada da IA");
-      batchResults.push(JSON.parse(stripFences(content.text)) as NormGroup[]);
-      await new Promise((r) => setTimeout(r, 1000)); // pausa de 1s entre lotes
-    }
-    grupos = batchResults.flat();
-  } catch (err) {
-    const isRateLimit = err instanceof Error && err.message.includes("rate_limit");
-    if (isRateLimit) {
+    if (resultado.stop_reason !== 'end_turn') {
       return NextResponse.json(
-        { error: "Muitas requisições simultâneas. Aguarde alguns segundos e tente novamente." },
+        { error: 'Resposta da IA incompleta. Tente novamente.' },
+        { status: 500 }
+      );
+    }
+
+    const content = resultado.content[0];
+    if (content.type !== 'text') {
+      return NextResponse.json({ error: 'Resposta inesperada da IA' }, { status: 500 });
+    }
+
+    grupos = JSON.parse(stripFences(content.text)) as NormGroup[];
+  } catch (err) {
+    const e = err as Error;
+    if (e.message?.includes('rate_limit')) {
+      return NextResponse.json(
+        { error: 'Muitas requisições. Aguarde alguns segundos e tente novamente.' },
         { status: 429 }
       );
     }
-    const msg = err instanceof Error ? err.message : "Erro desconhecido";
-    return NextResponse.json({ error: msg }, { status: 500 });
+    return NextResponse.json({ error: e.message ?? 'Erro desconhecido' }, { status: 500 });
   }
 
-  let normalizado = 0;
+  let talhoes_consolidados = 0;
   for (const grupo of grupos) {
     if (!grupo.alias_ids?.length) continue;
-    const { error: updateError } = await supabase
-      .from("talhoes")
-      .update({ canonical_id: grupo.canonical_id })
-      .in("id", grupo.alias_ids);
 
-    if (updateError) {
-      return NextResponse.json({ error: updateError.message }, { status: 500 });
+    const { error: plantiosError } = await supabase
+      .from('plantios')
+      .update({ talhao_id: grupo.canonical_id })
+      .in('talhao_id', grupo.alias_ids);
+
+    if (plantiosError) {
+      return NextResponse.json({ error: plantiosError.message }, { status: 500 });
     }
-    normalizado += grupo.alias_ids.length;
+
+    const { error: talhaoError } = await supabase
+      .from('talhoes')
+      .update({ ativo: false })
+      .in('id', grupo.alias_ids);
+
+    if (talhaoError) {
+      return NextResponse.json({ error: talhaoError.message }, { status: 500 });
+    }
+
+    talhoes_consolidados += grupo.alias_ids.length;
   }
 
-  return NextResponse.json({ normalizado, grupos });
+  return NextResponse.json({
+    grupos: grupos.length,
+    talhoes_consolidados,
+    detalhes: grupos,
+  });
 }
